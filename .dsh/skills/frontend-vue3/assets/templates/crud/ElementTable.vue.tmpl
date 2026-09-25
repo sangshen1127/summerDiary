@@ -1,0 +1,68 @@
+<template>
+  <div class="{{entity}}-table">
+    <el-table
+      :data="items"
+      stripe
+      style="width: 100%"
+      :loading="loading"
+    >
+      <el-table-column prop="id" label="ID" width="80" />
+      {{table_columns}}
+      <el-table-column label="Created At" width="180">
+        <template #default="{ row }">
+          {{ formatDate(row.createdAt) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="Actions" width="200" align="center">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="emit('edit', row.id)">
+            Edit
+          </el-button>
+          <el-popconfirm
+            title="Delete?"
+            description="This action cannot be undone."
+            @confirm="emit('delete', row.id)"
+          >
+            <template #reference>
+              <el-button link type="danger">Delete</el-button>
+            </template>
+          </el-popconfirm>
+        </template>
+      </el-table-column>
+    </el-table>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ElTable, ElTableColumn, ElButton, ElPopconfirm } from 'element-plus';
+import type { {{Entity}} } from '@/types/{{entity}}';
+
+interface Props {
+  items: {{Entity}}[];
+  loading?: boolean;
+}
+
+interface Emits {
+  (e: 'edit', id: number): void;
+  (e: 'delete', id: number): void;
+}
+
+defineProps<Props>();
+defineEmits<Emits>();
+
+const formatDate = (date: string): string => {
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+</script>
+
+<style scoped>
+.{{entity}}-table {
+  width: 100%;
+}
+</style>

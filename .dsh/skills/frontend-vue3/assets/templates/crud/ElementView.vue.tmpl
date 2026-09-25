@@ -1,0 +1,142 @@
+<template>
+  <div class="{{entity}}-view">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span class="title">{{Entity}} Management</span>
+          <el-button type="primary" @click="showForm = true">
+            New {{Entity}}
+          </el-button>
+        </div>
+      </template>
+
+      <!-- Table -->
+      <{{Entity}}Table
+        :items="store.items"
+        :loading="store.loading"
+        @edit="handleEdit"
+        @delete="handleDelete"
+      />
+
+      <!-- Pagination -->
+      <el-pagination
+        v-if="store.totalPages > 1"
+        :current-page="currentPage"
+        :page-size="store.limit"
+        :total="store.total"
+        @current-change="handlePageChange"
+        style="margin-top: 20px; text-align: right"
+      />
+    </el-card>
+
+    <!-- Form Dialog -->
+    <el-dialog
+      v-model="showForm"
+      :title="store.currentItem ? 'Edit {{Entity}}' : 'Create {{Entity}}'"
+      width="600px"
+      @close="closeForm"
+    >
+      <{{Entity}}Form
+        :item="store.currentItem"
+        :loading="store.loading"
+        :error="store.error"
+        @submit="handleFormSubmit"
+        @cancel="closeForm"
+      />
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElCard, ElButton, ElDialog, ElPagination } from 'element-plus';
+import { use{{Entity}}Store } from '@/stores/{{entity}}.store';
+import type { Create{{Entity}}Request, Update{{Entity}}Request } from '@/types/{{entity}}';
+import {{Entity}}Table from './components/{{Entity}}Table.vue';
+import {{Entity}}Form from './components/{{Entity}}Form.vue';
+
+const store = use{{Entity}}Store();
+const showForm = ref(false);
+const currentPage = ref(1);
+
+const currentPage_computed = computed({
+  get: () => store.offset / store.limit + 1,
+  set: (val) => (currentPage.value = val),
+});
+
+onMounted(() => {
+  store.fetchList();
+});
+
+const closeForm = () => {
+  showForm.value = false;
+  store.clearCurrent();
+};
+
+const handleEdit = async (id: number) => {
+  await store.fetchById(id);
+  showForm.value = true;
+};
+
+const handleDelete = async (id: number) => {
+  try {
+    await ElMessageBox.confirm(
+      'This action cannot be undone. Continue?',
+      'Warning',
+      {
+        confirmButtonText: 'OK',
+        cancelButtonText: 'Cancel',
+        type: 'warning',
+      }
+    );
+    await store.remove(id);
+    ElMessage.success('Deleted successfully');
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to delete {{entity}}');
+    }
+  }
+};
+
+const handleFormSubmit = async (payload: Create{{Entity}}Request | Update{{Entity}}Request) => {
+  try {
+    if (store.currentItem?.id) {
+      await store.update(store.currentItem.id, payload as Update{{Entity}}Request);
+      ElMessage.success('Updated successfully');
+    } else {
+      await store.create(payload as Create{{Entity}}Request);
+      ElMessage.success('Created successfully');
+    }
+    closeForm();
+  } catch (error) {
+    ElMessage.error('Failed to save {{entity}}');
+  }
+};
+
+const handlePageChange = (page: number) => {
+  const newOffset = (page - 1) * store.limit;
+  store.fetchList(newOffset, store.limit);
+};
+</script>
+
+<style scoped>
+.{{entity}}-view {
+  padding: 20px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.box-card {
+  margin-bottom: 20px;
+}
+</style>

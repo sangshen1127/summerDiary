@@ -1,0 +1,141 @@
+/**
+ * {{Entity}} Pinia store
+ */
+
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import type { {{Entity}}, Create{{Entity}}Request, Update{{Entity}}Request } from '@/types/{{entity}}';
+import * as {{entity}}Api from '@/api/{{entity}}.api';
+
+export const use{{Entity}}Store = defineStore('{{entity}}', () => {
+  // State
+  const items = ref<{{Entity}}[]>([]);
+  const total = ref(0);
+  const currentItem = ref<{{Entity}} | null>(null);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
+  const offset = ref(0);
+  const limit = ref(20);
+
+  // Computed
+  const isEmpty = computed(() => items.value.length === 0);
+  const totalPages = computed(() => Math.ceil(total.value / limit.value));
+
+  // Actions
+  const fetchList = async (newOffset = 0, newLimit = limit.value) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      offset.value = newOffset;
+      limit.value = newLimit;
+      const response = await {{entity}}Api.get{{Entity}}List(offset.value, limit.value);
+      items.value = response.data;
+      total.value = response.total;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch {{entity}}s';
+      items.value = [];
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const fetchById = async (id: number) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await {{entity}}Api.get{{Entity}}ById(id);
+      currentItem.value = response.data;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch {{entity}}';
+      currentItem.value = null;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const create = async (payload: Create{{Entity}}Request) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await {{entity}}Api.create{{Entity}}(payload);
+      items.value.unshift(response.data);
+      total.value += 1;
+      return response.data;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to create {{entity}}';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const update = async (id: number, payload: Update{{Entity}}Request) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      const response = await {{entity}}Api.update{{Entity}}(id, payload);
+      const index = items.value.findIndex(item => item.id === id);
+      if (index !== -1) {
+        items.value[index] = response.data;
+      }
+      if (currentItem.value?.id === id) {
+        currentItem.value = response.data;
+      }
+      return response.data;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to update {{entity}}';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const remove = async (id: number) => {
+    loading.value = true;
+    error.value = null;
+    try {
+      await {{entity}}Api.delete{{Entity}}(id);
+      items.value = items.value.filter(item => item.id !== id);
+      total.value -= 1;
+      if (currentItem.value?.id === id) {
+        currentItem.value = null;
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to delete {{entity}}';
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const clearCurrent = () => {
+    currentItem.value = null;
+    error.value = null;
+  };
+
+  const clearError = () => {
+    error.value = null;
+  };
+
+  return {
+    // State
+    items,
+    total,
+    currentItem,
+    loading,
+    error,
+    offset,
+    limit,
+    // Computed
+    isEmpty,
+    totalPages,
+    // Actions
+    fetchList,
+    fetchById,
+    create,
+    update,
+    remove,
+    clearCurrent,
+    clearError,
+  };
+});

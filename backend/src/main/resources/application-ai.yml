@@ -1,0 +1,90 @@
+# ══════════════════════════════════════════════════════════════
+# AI 模块配置 —— 独立文件，避免和前后端配置互相覆盖
+# ══════════════════════════════════════════════════════════════
+# ⚠️ 协作约定：这个文件由「AI 模块负责人」主改，
+#    前后端负责人改 application.yml / application-dev.yml / application-prod.yml。
+#    双方都需要改的时候先在群里说一声。
+#
+# 结构见开发文档 §6.2 / §6.3 / §6.4
+# ══════════════════════════════════════════════════════════════
+
+app:
+  ai:
+    # ── 总开关 ────────────────────────────────────────────────
+    # false 时：不创建新的认知任务，应用照常启动，日记照常保存，
+    #           前端 AI 区域显示「AI 未启用」而不是报错。
+    # 这是刻意的默认值 —— 没有 API Key 的人 clone 下来也能完整跑通日记闭环。
+    analysis-enabled: ${AI_ANALYSIS_ENABLED:false}
+
+    # 没有 API Key 时是否使用 MockAiClient，
+    # 让它返回符合 AI Agent 文档 §5.3 schema 的固定合法 JSON。
+    # 保证 Phase 0-3 在没有 Key 的情况下也能验证整条链路。
+    use-mock-when-no-key: true
+
+    # ⚠️ 验收专用：让 Mock 假装模型失败。
+    #   success（默认）= 正常返回合法 JSON
+    #   timeout        = 抛超时异常（可重试，退避 3 次后终态 FAILED）
+    #   invalid-json   = 抛 JSON 解析异常（不可重试，立刻 FAILED）
+    # 用途：验证「模型超时/报错时正文照样保存成功」这条验收标准。
+    # 生产环境必须保持 success，否则所有分析都会失败。
+    mock-outcome: ${AI_MOCK_OUTCOME:success}
+
+    # ⚠️ 验收专用：Mock 假装"模型很慢"，睡这么多毫秒再返回（默认 0 = 不睡）。
+    # 用途：① 证明"保存日记没有被模型拖住"（保存 < 1s，任务 1.5s 后才成功）；
+    #       ② 让前端的「分析中」界面能被稳定观察到。
+    # 只影响 Mock，接上真实模型后无作用。
+    mock-delay-ms: ${AI_MOCK_DELAY_MS:0}
+
+    # Worker 轮询间隔（毫秒）。默认 5 秒。
+    # 验收时调小（如 500）可以更快观察到状态流转。
+    worker-interval-ms: ${AI_WORKER_INTERVAL_MS:5000}
+
+    # 指数退避基准（毫秒）。第 n 次重试等 base * 2^(n-1)：
+    #   默认 10000 → 10s / 20s / 40s
+    # 验收时调小（如 500）可以在几秒内跑完"重试 3 次后终态 FAILED"。
+    retry-backoff-base-ms: ${AI_RETRY_BACKOFF_BASE_MS:10000}
+
+    # ── Chat 模型（DeepSeek，OpenAI 兼容接口）──────────────────
+    chat:
+      base-url: ${AI_BASE_URL:https://api.deepseek.com/v1}
+      api-key: ${AI_API_KEY:}
+      model: ${AI_CHAT_MODEL:deepseek-chat}
+      # 日记分析要稳定可复现，温度取低值
+      analysis-temperature: 0.1
+      # 对话回答可以稍微活泼
+      chat-temperature: 0.7
+
+    # ── Embedding 模型（独立提供商）───────────────────────────
+    # ⚠️ DeepSeek 不提供 Embedding API，这里必须另配。
+    #    推荐：阿里云百炼 text-embedding-v3（1024 维）/ 硅基流动 BAAI/bge-m3（1024 维）
+    #    Phase 5 之前留空即可。
+    embedding:
+      base-url: ${AI_EMBEDDING_BASE_URL:}
+      api-key: ${AI_EMBEDDING_API_KEY:}
+      model: ${AI_EMBEDDING_MODEL:}
+      # ⚠️ 维度必须与实际模型一致。写入向量时会把 model + dimension
+      #    存进 Chroma 的 metadata，检索时不匹配直接抛错，
+      #    避免「静默返回垃圾结果」这种最难查的 bug。
+      dimension: ${AI_EMBEDDING_DIMENSION:0}
+
+    # ── 可靠性参数（AI Agent 文档 §8.2）───────────────────────
+    reliability:
+      connect-timeout-ms: ${AI_CONNECT_TIMEOUT_MS:5000}
+      read-timeout-ms: ${AI_READ_TIMEOUT_MS:30000}
+      max-retries: ${AI_MAX_RETRIES:3}
+      # 上下文预算（token），超出后按重要度截断
+      context-token-budget: ${AI_CONTEXT_TOKEN_BUDGET:6000}
+
+    # ── 向量库 ────────────────────────────────────────────────
+    vector:
+      store: ${VECTOR_STORE:chroma}
+      url: ${VECTOR_DB_URL:http://localhost:8000}
+      # 召回条数（AI Agent 文档 §7.1 第 4 步：默认 Top-K=8）
+      default-top-k: 8
+
+    # ── Prompt 版本（AI Agent 文档 §8.1）──────────────────────
+    # 模板存放在 resources/prompts/，发布时记录版本号到 ai_task 便于追溯
+    prompt:
+      diary-analysis-version: v1
+      chat-answer-version: v1
+      json-repair-version: v1

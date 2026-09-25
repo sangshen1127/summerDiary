@@ -1,0 +1,213 @@
+======================================================================
+ 模块 2-3 接口演示 （测试数据前缀: ZZDEMO15682）
+======================================================================
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 0 步：确认后端可用
+──────────────────────────────────────────────────────────────────────
+  【未登录】 GET http://localhost:8080/api/health
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"status":"UP","application":"ai-diary-backend","profile":"dev","server_time_utc":"2026-09-23T10:58:35.963369200Z","timezone":"UTC"},"timestamp":1790161115963}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 0 步：未登录访问受保护接口 —— 应该 401 + 40101
+──────────────────────────────────────────────────────────────────────
+  【未登录】 GET http://localhost:8080/api/diaries
+    ← HTTP 401
+    ← 响应: {"code":40101,"message":"请先登录","data":null,"timestamp":1790161115984}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 1 步：注册两个用户（注意：注册【不】下发 Cookie）
+──────────────────────────────────────────────────────────────────────
+  【A】 POST http://localhost:8080/api/auth/register
+    请求体: {"username":"zzdemo15682_a",...}
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":70,"username":"zzdemo15682_a","nickname":"甲","ai_enabled":true,"created_at":"2026-09-23T10:58:36"},"timestamp":1790161116063}
+    >>> 注意看：Set-Cookie = 无（正确！注册不登录）
+  【B】 POST http://localhost:8080/api/auth/register
+    请求体: {"username":"zzdemo15682_b",...}
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":71,"username":"zzdemo15682_b","nickname":"乙","ai_enabled":true,"created_at":"2026-09-23T10:58:36"},"timestamp":1790161116141}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 1 步：登录 —— 这时才下发 Cookie（每次登录会话 ID 都会变）
+──────────────────────────────────────────────────────────────────────
+  【A】 POST http://localhost:8080/api/auth/login
+    请求体: {"username":"zzdemo15682_a",...}
+    ← HTTP 200
+    ← Set-Cookie: AI_DIARY_SESSION=E663E276480DE0D974000E1E4D9D17F0; Path=/; HttpOnly; SameSite=La...
+    ← 响应: {"code":0,"message":"success","data":{"id":70,"username":"zzdemo15682_a","nickname":"甲","ai_enabled":true,"created_at":"2026-09-23T10:58:36"},"timestamp":1790161116207}
+    >>> A 的会话 ID = E663E276480DE0D974000E1E4D9D17F0
+  【B】 POST http://localhost:8080/api/auth/login
+    请求体: {"username":"zzdemo15682_b",...}
+    ← HTTP 200
+    ← Set-Cookie: AI_DIARY_SESSION=D2FFAC55F89BB04147FDD0D456BE35ED; Path=/; HttpOnly; SameSite=La...
+    ← 响应: {"code":0,"message":"success","data":{"id":71,"username":"zzdemo15682_b","nickname":"乙","ai_enabled":true,"created_at":"2026-09-23T10:58:36"},"timestamp":1790161116274}
+    >>> B 的会话 ID = D2FFAC55F89BB04147FDD0D456BE35ED
+    >>> 两人会话 ID 不同（正确，互相隔离）
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 2 步：创建日记 —— 注意 content 返回【明文】、created_at 带 Z、analysis_status 为 null
+──────────────────────────────────────────────────────────────────────
+  【A】 POST http://localhost:8080/api/diaries
+    请求体: {title/content/mood/weather/location/tag_ids}
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":101,"title":"ZZDEMO15682 海边的傍晚","content":"今天去海边走了走。\n第二行。","mood":"平静","weather":"晴","location":"海边","tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116290}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 2 步：详情 —— content 是解密后的明文
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/diaries/101
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"id":101,"title":"ZZDEMO15682 海边的傍晚","content":"今天去海边走了走。\n第二行。","mood":"平静","weather":"晴","location":"海边","tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116297}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 2 步：列表 —— 注意 items[].content 是 null（列表刻意不解密正文）
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/diaries?page=0&size=20
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[{"id":101,"title":"ZZDEMO15682 海边的傍晚","content":null,"mood":"平静","weather":"晴","location":"海边","tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"}],"page":0,"size":20,"total":1,"hasNext":false},"timestamp":1790161116304}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 2 步：PUT 整体替换 —— 只传 title/content，weather/location 会被清空
+──────────────────────────────────────────────────────────────────────
+  【A】 PUT http://localhost:8080/api/diaries/101
+    请求体: {"title":"改过的标题","content":"改过的正文","mood":"开心"}
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"id":101,"title":"ZZDEMO15682 改过的标题","content":"改过的正文","mood":"开心","weather":null,"location":null,"tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116321}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 3 步【重点】：跨用户越权①：B 读 A 的日记 —— 必须 404 + 40401，且响应里没有 A 的数据
+──────────────────────────────────────────────────────────────────────
+  【B】 GET http://localhost:8080/api/diaries/101  (A 的日记)
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116326}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 3 步【重点】：跨用户越权②：B 改 A 的日记
+──────────────────────────────────────────────────────────────────────
+  【B】 PUT http://localhost:8080/api/diaries/101
+    请求体: {"title":"B篡改","content":"B篡改"}
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116333}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 3 步【重点】：跨用户越权③：B 删 A 的日记
+──────────────────────────────────────────────────────────────────────
+  【B】 DELETE http://localhost:8080/api/diaries/101
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116339}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 3 步：复核：A 的日记还在、内容没被改
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/diaries/101
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"id":101,"title":"ZZDEMO15682 改过的标题","content":"改过的正文","mood":"开心","weather":null,"location":null,"tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116345}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：建标签 + 同名复用（第二次必须返回同一个 id，不是 409）
+──────────────────────────────────────────────────────────────────────
+  【A】 POST http://localhost:8080/api/tags
+    请求体: {"name":"ZZDEMO15682_读书"}
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":49,"name":"ZZDEMO15682_读书","created_at":null},"timestamp":1790161116358}
+  【A】 POST http://localhost:8080/api/tags
+    请求体: {"name":"ZZDEMO15682_读书"}  (第二次，同名)
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":49,"name":"ZZDEMO15682_读书","created_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116367}
+    >>> 第一次 id=49，第二次 id=49 —— 相同（正确，幂等复用）
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：标签列表
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/tags
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":[{"id":49,"name":"ZZDEMO15682_读书","created_at":"2026-09-23T10:58:36Z"}],"timestamp":1790161116374}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步【重点】：★ tag_id 筛选（就是刚修好的那个 bug）
+──────────────────────────────────────────────────────────────────────
+    先建一篇带标签的日记：
+  【A】 POST http://localhost:8080/api/diaries
+    请求体: {title: "...筛选目标", tag_ids: [49]}
+    ← HTTP 201
+    ← 响应: {"code":0,"message":"success","data":{"id":102,"title":"ZZDEMO15682 筛选命中目标","content":"x","mood":null,"weather":null,"location":null,"tags":[{"id":49,"name":"ZZDEMO15682_读书","created_at":"2026-09-23T10:58:36Z"}],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},"timestamp":1790161116394}
+    然后用 tag_id=49 筛选 —— 必须只返回那一篇，不能返回全部：
+  【A】 GET http://localhost:8080/api/diaries?tag_id=49
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[{"id":102,"title":"ZZDEMO15682 筛选命中目标","content":null,"mood":null,"weather":null,"location":null,"tags":[{"id":49,"name":"ZZDEMO15682_读书","created_at":"2026-09-23T10:58:36Z"}],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"}],"page":0,"size":20,"total":1,"hasNext":false},"timestamp":1790161116403}
+    对照组：用一个【没有关联日记】的标签筛选 —— 应该 items 为空：
+  【A】 GET http://localhost:8080/api/diaries?tag_id=50
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[],"page":0,"size":20,"total":0,"hasNext":false},"timestamp":1790161116422}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：边界值：size 超限 / page 负数 / 非法时间格式
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/diaries?page=0&size=101
+    ← HTTP 400
+    ← 响应: {"code":40001,"message":"每页最多 100 条，当前请求 101 条","data":null,"timestamp":1790161116424}
+  【A】 GET http://localhost:8080/api/diaries?page=-1&size=20
+    ← HTTP 400
+    ← 响应: {"code":40001,"message":"页码不能为负数","data":null,"timestamp":1790161116429}
+  【A】 GET http://localhost:8080/api/diaries?from=not-a-date
+    ← HTTP 400
+    ← 响应: {"code":40001,"message":"参数格式有误：from","data":null,"timestamp":1790161116433}
+  【A】 GET http://localhost:8080/api/diaries?page=0&size=100
+    请求体: （边界值 100，应 200）
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[{"id":102,"title":"ZZDEMO15682 筛选命中目标","content":null,"mood":null,"weather":null,"location":null,"tags":[{"id":49,"name":"ZZDEMO15682_读书","created_at":"2026-09-23T10:58:36Z"}],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"},{"id":101,"title":"ZZDEMO15682 改过的标题","content":null,"mood":"开心","weather":null,"location":null,"tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"}],"page":0,"size":100,"total":2,"hasNext":false},"timestamp":1790161116442}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：keyword 只搜标题：用正文里的词搜应该搜不到
+──────────────────────────────────────────────────────────────────────
+  【A】 GET http://localhost:8080/api/diaries?keyword=海边走了走  (正文里的词)
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[],"page":0,"size":20,"total":0,"hasNext":false},"timestamp":1790161116448}
+  【A】 GET http://localhost:8080/api/diaries?keyword=改过的标题  (标题里的词)
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":{"items":[{"id":101,"title":"ZZDEMO15682 改过的标题","content":null,"mood":"开心","weather":null,"location":null,"tags":[],"analysis_status":null,"created_at":"2026-09-23T10:58:36Z","updated_at":"2026-09-23T10:58:36Z"}],"page":0,"size":20,"total":1,"hasNext":false},"timestamp":1790161116456}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：删除正在被使用的标签 —— 必须 409 + 40901 + 篇数
+──────────────────────────────────────────────────────────────────────
+  【A】 DELETE http://localhost:8080/api/tags/49  (正在被使用)
+    ← HTTP 409
+    ← 响应: {"code":40901,"message":"该标签正在被 1 篇日记使用，无法删除。请先移除这些日记中的该标签。","data":null,"timestamp":1790161116465}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：删除未被使用的标签 —— 应该 200
+──────────────────────────────────────────────────────────────────────
+  【A】 DELETE http://localhost:8080/api/tags/50  (未被使用)
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":null,"timestamp":1790161116478}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：跨用户标签：A 删 B 的标签
+──────────────────────────────────────────────────────────────────────
+  【A】 DELETE http://localhost:8080/api/tags/51  (B 的标签)
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116496}
+
+──────────────────────────────────────────────────────────────────────
+▶ 第 4 步：删除日记（软删除）+ 重复删除
+──────────────────────────────────────────────────────────────────────
+  【A】 DELETE http://localhost:8080/api/diaries/101
+    ← HTTP 200
+    ← 响应: {"code":0,"message":"success","data":null,"timestamp":1790161116515}
+  【A】 GET http://localhost:8080/api/diaries/101  (删后查)
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116519}
+  【A】 DELETE http://localhost:8080/api/diaries/101  (重复删)
+    ← HTTP 404
+    ← 响应: {"code":40401,"message":"请求的内容不存在","data":null,"timestamp":1790161116526}
+
+======================================================================
+ 演示结束。测试数据前缀: ZZDEMO15682
+ 如需清理（在 MySQL 客户端执行）：
+   DELETE dt FROM diary_tag dt JOIN diary d ON d.id=dt.diary_id WHERE d.title LIKE 'ZZDEMO15682%';
+   DELETE FROM diary WHERE title LIKE 'ZZDEMO15682%';
+   DELETE FROM tag WHERE name LIKE 'ZZDEMO15682%';
+   DELETE FROM `user` WHERE username LIKE 'zzdemo15682%';
+======================================================================

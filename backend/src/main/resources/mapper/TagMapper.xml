@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     TagMapper —— 标签表 SQL
+     ══════════════════════════════════════════════════════════════
+     ⚠️ 标签是【用户私有】的：两个用户都可以有叫「读书」的标签。
+        数据库唯一键是 (user_id, name)，不是 (name)。
+        因此本文件每个方法都必须带 user_id。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.TagMapper">
+
+    <sql id="tagColumns">
+        id, user_id, name, created_at
+    </sql>
+
+    <!-- ── 1. 新增标签 ───────────────────────────────────────── -->
+    <!-- created_at 交给数据库默认值。
+         注意这里<b>没有</b> INSERT IGNORE / ON DUPLICATE KEY UPDATE：
+         同名标签的复用由 Service 先查再决定（查不到才插），
+         唯一键 uk_tag_user_name 只是并发时的最后一道防线。
+         如果这里用 INSERT IGNORE，会把"并发插入同一个名字"静默吃掉，
+         导致 Service 拿不到新建标签的 id（影响后续 diary_tag 写入）。
+         Service 捕获 DuplicateKeyException 后重新查询即可，
+         见 GlobalExceptionHandler 对 DuplicateKeyException 的兜底说明。 -->
+    <insert id="insert" parameterType="Tag"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tag (user_id, name)
+        VALUES (#{userId}, #{name})
+    </insert>
+
+    <!-- ── 2. 查询某用户的全部标签 ───────────────────────────── -->
+    <!-- 按 created_at 正序 + id 正序：
+         正序的理由是顺序稳定（"最新的在最前面"会让每新建一个标签
+         就打乱原有位置，用户找不到刚才那个）。
+         加 id 正序同样是为了打破同秒创建时的平局，保证顺序确定。 -->
+    <select id="selectByUserId" resultType="Tag">
+        SELECT
+        <include refid="tagColumns"/>
+        FROM tag
+        WHERE user_id = #{userId}
+        ORDER BY created_at ASC, id ASC
+    </select>
+
+    <!-- ── 3. 按 ID 集合批量查当前用户的标签 ─────────────────── -->
+    <!-- 用途：校验前端传来的 tagIds 是否【全部】属于当前用户。
+         返回值数量 < ids 数量 就说明有 ID 不存在或属于别人
+         → Service 抛 40401（不区分两者，避免泄露"这个 ID 真实存在"）。
+
+         ⚠️ ids 由调用方保证非空。空集合会生成 IN ()，
+            在 MySQL 下是语法错误。这个判断放在 Service 层做，
+            而不是在这里加 <if> 兜底 —— 传空集合本身就是调用方的
+            逻辑漏洞，静默返回空列表会把它藏起来。 -->
+    <select id="selectByIdsAndUserId" resultType="Tag">
+        SELECT
+        <include refid="tagColumns"/>
+        FROM tag
+        WHERE user_id = #{userId}
+        AND id IN
+        <foreach collection="ids" item="tagId" open="(" separator="," close=")">
+            #{tagId}
+        </foreach>
+    </select>
+
+    <!-- ── 4. 统计某标签被多少篇未删除日记使用 ───────────────── -->
+    <!-- 用于 DELETE /api/tags/{id} 的前置检查（只允许删除"未被使用"的标签）。
+
+         ⚠️ 三个条件缺一不可：
+           1. d.user_id = #{userId} —— diary_tag 没有 user_id 列，
+              只凭 diary_id 关联会把【别人的日记】算进来，
+              导致"我的标签因为别人的日记而删不掉"；
+           2. d.deleted = 0 —— 一篇已删除的日记如果还占着标签，
+              这个标签就永远删不掉了；
+           3. t.user_id = #{userId} —— 防止用别人的 tagId 探测使用量。
+
+         另外这也是"用别人的 tagId 调删除接口会得到什么"的关键：
+         由于 tagId 不属于我，DELETE 时影响行数为 0 → 40401，
+         与"标签不存在"表现一致，不泄露存在性。 -->
+    <select id="countUsedByDiaries" resultType="long">
+        SELECT COUNT(1)
+        FROM diary_tag dt
+        JOIN diary d ON d.id = dt.diary_id
+        JOIN tag t ON t.id = dt.tag_id
+        WHERE dt.tag_id = #{tagId}
+        AND d.user_id = #{userId}
+        AND d.deleted = 0
+        AND t.user_id = #{userId}
+    </select>
+
+    <!-- ── 5. 按名称 + 归属查标签（同名复用）─────────────────── -->
+    <!-- ⚠️ 必须用 SQL 查询，不能用 Java 的 equals 判断重名：
+         数据库排序规则 utf8mb4_0900_ai_ci 是【大小写不敏感】的，
+         所以 "Book" 和 "book" 在唯一键层面是同一个标签。
+         若 Service 用大小写敏感的 Java 比较认为"不重复"就插入，
+         会直接撞唯一键报 40901，用户看到莫名其妙的冲突提示。
+
+         LIMIT 1：唯一键保证最多一条，加上它可以让优化器明确知道
+         只需要一行（也防止将来唯一键被误删时返回多行导致 TooManyResults）。 -->
+    <select id="selectByNameAndUserId" resultType="Tag">
+        SELECT
+        <include refid="tagColumns"/>
+        FROM tag
+        WHERE user_id = #{userId}
+        AND name = #{name}
+        LIMIT 1
+    </select>
+
+    <!-- ── 6. 删除标签（物理删除）───────────────────────────── -->
+    <!-- 为什么标签物理删除而日记软删除：标签没有需要触发的补偿任务
+         （不产生记忆、不进向量库），且删除前已检查过"未被任何日记使用"，
+         删掉不会留下悬空引用。
+
+         WHERE 带 user_id：返回 0 表示不存在或不属于该用户 → 40401。 -->
+    <delete id="deleteByIdAndUserId">
+        DELETE FROM tag
+        WHERE id = #{id}
+        AND user_id = #{userId}
+    </delete>
+
+</mapper>

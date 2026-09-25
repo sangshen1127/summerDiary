@@ -1,0 +1,94 @@
+<template>
+  <el-form
+    ref="formRef"
+    :model="formData"
+    label-width="100px"
+    class="{{entity}}-form"
+  >
+    {{form_fields}}
+
+    <el-form-item>
+      <el-button type="primary" @click="handleSubmit" :loading="loading">
+        {{ isEdit ? 'Update' : 'Create' }} {{Entity}}
+      </el-button>
+      <el-button @click="emit('cancel')">Cancel</el-button>
+    </el-form-item>
+
+    <el-alert
+      v-if="error"
+      :title="error"
+      type="error"
+      :closable="false"
+      style="margin-top: 16px"
+    />
+  </el-form>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import { ElForm, ElFormItem, ElButton, ElAlert } from 'element-plus';
+import type { {{Entity}}, Create{{Entity}}Request, Update{{Entity}}Request } from '@/types/{{entity}}';
+
+interface Props {
+  item?: {{Entity}} | null;
+  loading?: boolean;
+  error?: string | null;
+}
+
+interface Emits {
+  (e: 'submit', payload: Create{{Entity}}Request | Update{{Entity}}Request): void;
+  (e: 'cancel'): void;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+});
+
+const emit = defineEmits<Emits>();
+
+const formRef = ref();
+const formData = ref<Create{{Entity}}Request>({
+  // Initialize fields here
+});
+
+const isEdit = ref(false);
+
+// Watch for item changes to populate form
+watch(
+  () => props.item,
+  (newItem) => {
+    if (newItem) {
+      isEdit.value = true;
+      // Populate form with item data
+      Object.keys(newItem).forEach((key) => {
+        if (key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
+          (formData.value as any)[key] = (newItem as any)[key];
+        }
+      });
+    } else {
+      isEdit.value = false;
+      resetForm();
+    }
+  }
+);
+
+const resetForm = () => {
+  formRef.value?.resetFields();
+};
+
+const handleSubmit = async () => {
+  try {
+    await formRef.value?.validate();
+    emit('submit', formData.value);
+  } catch (error) {
+    console.error('Form validation failed:', error);
+  }
+};
+</script>
+
+<style scoped>
+.{{entity}}-form {
+  width: 100%;
+  max-width: 600px;
+}
+</style>

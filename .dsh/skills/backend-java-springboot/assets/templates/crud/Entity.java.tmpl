@@ -1,0 +1,30 @@
+package {{package}}.domain;
+
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import java.time.LocalDateTime;
+
+/**
+ * {{Entity}} entity
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@TableName("{{table}}")
+public class {{Entity}} {
+
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
+    {{fields}}
+
+    @TableField(value = "created_at", fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+
+    @TableField(value = "updated_at", fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+}

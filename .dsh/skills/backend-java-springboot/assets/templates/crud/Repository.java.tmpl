@@ -1,0 +1,29 @@
+package {{package}}.repository;
+
+import {{package}}.domain.{{Entity}};
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import java.util.List;
+
+/**
+ * {{Entity}} mapper
+ */
+@Mapper
+public interface {{Entity}}Mapper extends BaseMapper<{{Entity}}> {
+
+    /**
+     * Find {{entity}} by id
+     */
+    {{Entity}} selectById(Long id);
+
+    /**
+     * Find all {{entity}}s
+     */
+    List<{{Entity}}> selectList();
+
+    /**
+     * Delete {{entity}} by id
+     */
+    int deleteById(Long id);
+}

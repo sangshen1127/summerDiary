@@ -1,0 +1,73 @@
+/* ══════════════════════════════════════════════════════════════
+   全局样式
+   ══════════════════════════════════════════════════════════════
+   ⚠️ 样式方案已冻结为 Element Plus（开发文档 §0 决策 1），
+      不引入 Tailwind。这里只放 CSS 变量和极少量全局重置，
+      组件样式一律写在组件的 <style scoped> 里。
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* 主色板 —— 后续主题切换（Settings 页）改这里即可 */
+  --ad-color-primary: #409eff;
+  --ad-color-success: #67c23a;
+  --ad-color-warning: #e6a23c;
+  --ad-color-danger: #f56c6c;
+  --ad-color-info: #909399;
+
+  --ad-text-primary: #303133;
+  --ad-text-regular: #606266;
+  --ad-text-secondary: #909399;
+  --ad-text-placeholder: #c0c4cc;
+
+  --ad-border-color: #dcdfe6;
+  --ad-bg-page: #f5f7fa;
+  --ad-bg-card: #ffffff;
+
+  /* 🔴 响应式铁律：最小支持 375px（开发文档 §8.6）。 */
+  --ad-content-max-width: 1200px;
+  --ad-header-height: 56px;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* 暗色模式变量占位，Settings 页做主题切换时启用 */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ad-text-primary);
+  background-color: var(--ad-bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 键盘可达性：焦点必须可见（开发文档 §8.6） */
+:focus-visible {
+  outline: 2px solid var(--ad-color-primary);
+  outline-offset: 2px;
+}
+
+/* 隐藏滚动条但保留滚动能力（日记列表常用） */
+.ad-scroll-hidden {
+  scrollbar-width: thin;
+}
+
+/* 长文本换行，避免日记正文和 AI 回答溢出 */
+.ad-break-word {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}

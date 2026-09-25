@@ -1,0 +1,63 @@
+/**
+ * {{Entity}} API module
+ */
+
+import { http } from './http';
+import type {
+  {{Entity}},
+  Create{{Entity}}Request,
+  Update{{Entity}}Request,
+  {{Entity}}ListResponse,
+  {{Entity}}Response,
+} from '@/types/{{entity}}';
+
+const API_PREFIX = '/api/v1/{{entities}}';
+
+/**
+ * Get all {{entity}}s
+ */
+export const get{{Entity}}List = async (
+  offset: number = 0,
+  limit: number = 20
+): Promise<{{Entity}}ListResponse> => {
+  const response = await http.get<{{Entity}}ListResponse>(API_PREFIX, {
+    params: { offset, limit },
+  });
+  return response.data;
+};
+
+/**
+ * Get {{entity}} by id
+ */
+export const get{{Entity}}ById = async (id: number): Promise<{{Entity}}Response> => {
+  const response = await http.get<{{Entity}}Response>(`${API_PREFIX}/${id}`);
+  return response.data;
+};
+
+/**
+ * Create {{entity}}
+ */
+export const create{{Entity}} = async (
+  payload: Create{{Entity}}Request
+): Promise<{{Entity}}Response> => {
+  const response = await http.post<{{Entity}}Response>(API_PREFIX, payload);
+  return response.data;
+};
+
+/**
+ * Update {{entity}}
+ */
+export const update{{Entity}} = async (
+  id: number,
+  payload: Update{{Entity}}Request
+): Promise<{{Entity}}Response> => {
+  const response = await http.put<{{Entity}}Response>(`${API_PREFIX}/${id}`, payload);
+  return response.data;
+};
+
+/**
+ * Delete {{entity}}
+ */
+export const delete{{Entity}} = async (id: number): Promise<void> => {
+  await http.delete(`${API_PREFIX}/${id}`);
+};

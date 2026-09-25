@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="{{package}}.repository.{{Entity}}Mapper">
+
+    <!-- Result Map -->
+    <resultMap id="BaseResultMap" type="{{package}}.domain.{{Entity}}">
+        <id column="id" property="id" jdbcType="BIGINT"/>
+        {{result_mappings}}
+        <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
+        <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- Base Column List -->
+    <sql id="Base_Column_List">
+        id, {{column_list}}, created_at, updated_at
+    </sql>
+
+    <!-- Select by ID -->
+    <select id="selectById" resultMap="BaseResultMap" parameterType="java.lang.Long">
+        SELECT <include refid="Base_Column_List"/>
+        FROM {{table}}
+        WHERE id = #{id,jdbcType=BIGINT}
+    </select>
+
+    <!-- Select All -->
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM {{table}}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- Insert -->
+    <insert id="insert" parameterType="{{package}}.domain.{{Entity}}" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO {{table}} ({{column_list}}, created_at, updated_at)
+        VALUES ({{insert_values}}, #{createdAt,jdbcType=TIMESTAMP}, #{updatedAt,jdbcType=TIMESTAMP})
+    </insert>
+
+    <!-- Update by ID -->
+    <update id="updateById" parameterType="{{package}}.domain.{{Entity}}">
+        UPDATE {{table}}
+        <set>
+            {{update_set}},
+            updated_at = #{updatedAt,jdbcType=TIMESTAMP}
+        </set>
+        WHERE id = #{id,jdbcType=BIGINT}
+    </update>
+
+    <!-- Delete by ID -->
+    <delete id="deleteById" parameterType="java.lang.Long">
+        DELETE FROM {{table}}
+        WHERE id = #{id,jdbcType=BIGINT}
+    </delete>
+
+</mapper>

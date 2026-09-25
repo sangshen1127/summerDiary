@@ -1,0 +1,87 @@
+﻿
+==================================================================
+  Phase 2 acceptance  /  environment check
+==================================================================
+JDK 17       : OK
+backend 8080 : UP
+frontend 5173: UP
+
+==================================================================
+  1. Backend unit tests (mvn -o test, offline)
+==================================================================
+    pass=69  fail=0
+
+==================================================================
+  2. Data layer (JDBC, module 2-2)
+==================================================================
+
+>>> TestDiaryDataLayer - SQL logic + ownership (50)
+    pass=50  fail=0
+
+==================================================================
+  3. MyBatis mapping (module 2-2)
+==================================================================
+
+>>> TestDiaryMappers - XML parse + #{} binding (47)
+    pass=47  fail=0
+
+==================================================================
+  4. HTTP API acceptance (module 2-3, 8 endpoints)
+==================================================================
+
+>>> TestDiaryApi - endpoints + cross-user (79)
+    pass=79  fail=0
+
+==================================================================
+  5. End-to-end via Vite proxy (module 2-5)
+==================================================================
+
+>>> TestDiaryE2E - full diary loop + SPA routes (63)
+    pass=63  fail=0
+
+==================================================================
+  6. Phase 1 regression (auth, 55)
+==================================================================
+    TestRegister               pass=14 fail=0
+    TestRegisterSecurity       pass=6 fail=0
+    TestSession                pass=17 fail=0
+    TestLogoutResidual         pass=4 fail=0
+    TestAuthorizationMatrix    pass=14 fail=0
+
+==================================================================
+  7. Browser rendering (headless Edge, module 2-4)
+==================================================================
+    NOTE: needs elevation in a sandbox (Edge spawns a subprocess)
+    pass=24  fail=0
+
+==================================================================
+  8. Phase 3 AI analysis (async task + Mock model)
+==================================================================
+    AI mode       : success
+
+>>> TestAiTaskData - V2 migration + AI mappers (53)
+    pass=53  fail=0
+
+>>> TestAiTaskApi - async task, analysis, cross-user (68)
+    pass=68  fail=0
+
+    Phase 3 spans three backend modes -- run this script once per mode:
+      success      -> TestAiTaskApi (68 assertions)
+      timeout      -> TestAiTaskFailure timeout (39 assertions)
+      invalid-json -> TestAiTaskFailure invalid-json (39 assertions)
+    To switch, restart the backend with a different $env:AI_MOCK_OUTCOME.
+    Recommended backend env (see docs section 11.6):
+      AI_ANALYSIS_ENABLED=true  AI_MOCK_DELAY_MS=1500
+      AI_WORKER_INTERVAL_MS=500 AI_RETRY_BACKOFF_BASE_MS=500
+
+==================================================================
+  SUMMARY
+==================================================================
+
+  TOTAL  pass=508   fail=0
+
+NOTE: steps 4/5/7 create real data. Each prints cleanup SQL at the
+      end of its log; see _acc_*.txt and the E2E log file.
+
+Logs: _acc_*.txt
+

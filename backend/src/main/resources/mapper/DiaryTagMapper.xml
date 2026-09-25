@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     DiaryTagMapper —— 日记-标签关联表 SQL
+     ══════════════════════════════════════════════════════════════
+     ⚠️⚠️ 本表【没有 user_id 列】，只有 (diary_id, tag_id) 联合主键。
+         所以本文件的每一条 SQL 都必须 JOIN diary 并带
+         d.user_id = #{userId}，把权限校验放进 SQL 本身。
+
+     反面教材（绝对不要这样写）：
+         SELECT tag_id FROM diary_tag WHERE diary_id = #{diaryId}
+       —— 只凭 diary_id 就查，别人的日记标签也能读出来。
+
+     详见开发文档 §4.7 与 DiaryTagMapper 接口的 Javadoc。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.DiaryTagMapper">
+
+    <!-- ── 1. 批量打标签（权限写在 SQL 里）───────────────────── -->
+    <!-- 结构：INSERT INTO ... SELECT ... FROM (UNION ALL 的 ID 列表) v
+              JOIN diary d ... JOIN tag t ... WHERE d.user_id = ? AND t.user_id = ?
+
+         为什么用 UNION ALL 而不是 VALUES：
+         MySQL 的 INSERT ... SELECT 不支持直接写 VALUES 列表，
+         必须把待插入的 ID 变成一个"结果集"才能参与 JOIN/WHERE 过滤。
+         UNION ALL（不是 UNION）是因为这里不需要去重 ——
+         去重由 Service 层负责，见下方说明。
+
+         ⚠️ 为什么必须用这个写法而不是"Service 先查日记归属、再直接 INSERT"：
+         这样写的话，"日记是不是我的"这个判断在 SQL 里由 JOIN 完成，
+         归属不匹配 → JOIN 无结果 → SELECT 返回空集 → 一行都不插、也不报错。
+         权限判断成了 SQL 的一部分，而不是流程的一部分，漏不掉。
+
+         ⚠️ 调用方（Service）的两项责任，本 SQL 不做兜底：
+           1. tagIds 必须【非空】—— 空集合会让 <foreach> 生成空的
+              UNION ALL 片段，SQL 直接语法错误；
+           2. tagIds 必须【已去重】—— 重复 ID 会撞 diary_tag 的联合主键报错。
+         另外"这些 tagIds 是否全属于我"必须【事先】用
+         TagMapper.selectByIdsAndUserId 校验并抛 40401；
+         本 SQL 的 t.user_id 条件只是第二道防线，不能用来倒推，
+         因为被过滤掉的非法 ID 和"本来就不需要插"无法区分。 -->
+    <insert id="insertByDiaryIdAndTagIds">
+        INSERT INTO diary_tag (diary_id, tag_id)
+        SELECT #{diaryId}, v.tag_id
+        FROM (
+        <foreach collection="tagIds" item="tagId" separator=" UNION ALL ">
+            SELECT #{tagId} AS tag_id
+        </foreach>
+        ) v
+        JOIN diary d ON d.id = #{diaryId}
+        JOIN tag t ON t.id = v.tag_id
+        WHERE d.user_id = #{userId}
+        AND d.deleted = 0
+        AND t.user_id = #{userId}
+    </insert>
+
+    <!-- ── 2. 批量查一批日记的标签（列表页用）────────────────── -->
+    <!-- 为什么需要"批量"版本：列表每页最多 100 条，
+         逐条查标签就是 100 次额外查询（经典 N+1 问题）。
+         这里一次查完，Service 按 diary_id 分组。
+
+         权限同样在 SQL 里：JOIN diary 带 d.user_id = #{userId}，
+         即使传入别人的 diaryIds，也只会返回自己那部分。
+         （d.deleted = 0 也要带：不返回已删除日记的标签。）
+
+         ⚠️ diaryIds 必须非空，由调用方保证（空列表 → IN () 语法错误）。
+            列表为空时 Service 直接跳过调用本方法。
+
+         返回 DiaryTag（只有 diaryId + tagId）；
+         标签名由 Service 用 TagMapper.selectByUserId 的结果补齐 ——
+         这样避免在 SQL 里多 JOIN 一次，也让"标签名"只有一个来源。 -->
+    <select id="selectTagsByDiaryIdsAndUserId" resultType="DiaryTag">
+        SELECT dt.diary_id AS diaryId,
+        dt.tag_id AS tagId
+        FROM diary_tag dt
+        JOIN diary d ON d.id = dt.diary_id
+        JOIN tag t ON t.id = dt.tag_id
+        WHERE d.user_id = #{userId}
+        AND d.deleted = 0
+        AND t.user_id = #{userId}
+        AND dt.diary_id IN
+        <foreach collection="diaryIds" item="diaryId" open="(" separator="," close=")">
+            #{diaryId}
+        </foreach>
+        ORDER BY dt.diary_id ASC, t.id ASC
+    </select>
+
+    <!-- ── 3. 清空某篇日记的标签关联 ─────────────────────────── -->
+    <!-- ⚠️⚠️ 这是本文件最危险的一条 SQL，请看仔细：
+
+         DELETE dt FROM diary_tag dt
+         JOIN diary d ON d.id = dt.diary_id
+         WHERE dt.diary_id = #{diaryId}          ← ★ 这一条绝不能漏 ★
+           AND d.user_id = #{userId}
+
+         WHERE 里的 dt.diary_id = #{diaryId} 是【作用范围限定】。
+         如果只写 JOIN + d.user_id 而漏掉 diary_id，就会删掉
+         这个用户【所有日记】的全部标签关联 —— 一个条件写漏就是数据灾难。
+
+         之所以还要 JOIN diary：diary_tag 没有 user_id，
+         只能通过 JOIN 才能校验"这篇日记是不是我的"。
+
+         调用方责任：日记归属必须已确认（先 selectByIdAndUserId 拿到日记，
+         或 update 返回 1）。本方法只负责"清空"，不判断"该不该清"。 -->
+    <delete id="deleteByDiaryIdAndUserId">
+        DELETE dt FROM diary_tag dt
+        JOIN diary d ON d.id = dt.diary_id
+        WHERE dt.diary_id = #{diaryId}
+        AND d.user_id = #{userId}
+    </delete>
+
+</mapper>

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI 日记 —— 带长期记忆与语义检索的私人日记" />
+    <!--
+      ⚠️ 必须显式声明 favicon。不声明时浏览器会去请求 /favicon.ico，
+      而项目没有这个文件 → 每次加载都在控制台留一条 404 错误。
+      模块 2-4 用 headless 浏览器验收时正是被这条"无害但碍事"的 404
+      干扰了判断 —— 控制台有红字就分不清"真错误"和"缺图标"。
+
+      用 SVG：零依赖、体积极小、配色跟随「森语时光」。
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>AI 日记</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

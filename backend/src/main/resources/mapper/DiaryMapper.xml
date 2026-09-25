@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     DiaryMapper —— 日记表 SQL
+     ══════════════════════════════════════════════════════════════
+     规范（开发文档 §6.3）：
+
+     1. 【禁止 SELECT *】必须显式列名。
+     2. 【禁止字符串拼接】只用 #{}，不用 ${}。
+     3. 【每个方法都必须带 user_id】diary 是用户私有资源。
+     4. 列名 → Java 属性的映射靠 application.yml 的
+        map-underscore-to-camel-case，不需要手写 resultMap。
+
+     ⚠️ 关于 content_ciphertext：
+        这一列存的是 AES-256-GCM 密文。本文件只负责"原样取出/写回"，
+        <b>绝不做加解密</b> —— 那是 DiaryServiceImpl 的职责（开发文档 §5.3）。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.DiaryMapper">
+
+    <!-- 可复用的列清单。抽出 <sql> 保证所有查询列名一致，
+         避免某处漏列导致字段为 null 这种难查的问题。 -->
+    <sql id="diaryColumns">
+        id, user_id, title, content_ciphertext, mood, weather, location,
+        deleted, created_at, updated_at
+    </sql>
+
+    <!-- ══════════════════════════════════════════════════════════
+         筛选条件片段 —— count 与分页查询共用
+         ══════════════════════════════════════════════════════════
+         ⚠️ 为什么必须共用：如果 count 和 select 的 WHERE 各写一份，
+         两边很容易在后续改动中漂移，症状是"总数说有 50 条，
+         翻到第 3 页却是空的" —— 而且这种 bug 只在特定筛选组合下出现，
+         非常难查。抽成同一个 <sql> 片段是从结构上杜绝它。
+
+         注意：这里<b>只放筛选条件</b>，不含 user_id / deleted ——
+         那两条是权限与可见性的硬约束，写在各自的 SQL 里更显眼。
+         ══════════════════════════════════════════════════════════ -->
+    <sql id="queryFilters">
+        <if test="query.keyword != null and query.keyword != ''">
+            <!-- 关键词只搜标题。正文是随机 IV 的 GCM 密文，
+                 SQL 无法对密文做 LIKE（开发文档 §4.6）。
+
+                 关于 LIKE 的通配符转义：这里刻意<b>不</b>转义用户输入的
+                 % 和 _。理由 —— 参数通过 #{} 绑定，不存在 SQL 注入；
+                 用户搜 "50%" 时把 % 当通配符处理，实际搜索体验更符合直觉
+                 （类似于"包含 50 的内容"）。这是刻意的行为选择，
+                 不是遗漏。若将来要改成精确字面匹配，需在 Service 层
+                 对 keyword 做 ESCAPE 处理并在这里加 ESCAPE 子句。 -->
+            AND title LIKE CONCAT('%', #{query.keyword}, '%')
+        </if>
+        <!-- 时间范围。NULL 表示该侧不限，所以 from/to 可以单独使用。
+             用 &gt;= 和 &lt;= 实现闭区间（含边界当天）。
+             注意：from/to 与数据库一样都是 UTC 语义，这里不做任何时区转换 ——
+             一旦转换就会整体偏移几小时，且很难被发现。 -->
+        <if test="query.from != null">
+            AND created_at &gt;= #{query.from}
+        </if>
+        <if test="query.to != null">
+            AND created_at &lt;= #{query.to}
+        </if>
+        <if test="query.mood != null and query.mood != ''">
+            AND mood = #{query.mood}
+        </if>
+        <!-- 按标签筛选。
+             ⚠️ 这里用 EXISTS 而不是 JOIN，两个理由：
+               1. 一篇日记可能有多个标签，用 JOIN 会让同一篇日记在结果里
+                  出现多行（必须再加 DISTINCT 去重），而 DISTINCT 对
+                  TEXT 类型的 content_ciphertext 排序代价很高；
+               2. EXISTS 命中即返回，配合 idx_diary_tag_tag (tag_id, diary_id)
+                  索引，在第 1 条匹配上就能短路，比 JOIN 更省。
+
+             权限：JOIN 里带 t.user_id = userId，确保"用别人的标签 ID 筛选"
+             只会得到空结果，而不是筛出别人的日记。
+             （diary_tag 没有 user_id 列，所以只能靠 JOIN 带条件 ——
+               见开发文档 §4.7 与本表的 DDL 注释。） -->
+        <if test="query.tagId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM diary_tag dt
+                JOIN tag t ON t.id = dt.tag_id
+                WHERE dt.diary_id = diary.id
+                  AND t.id = #{query.tagId}
+                  AND t.user_id = #{userId}
+            )
+        </if>
+    </sql>
+
+    <!-- ── 1. 新增日记 ───────────────────────────────────────── -->
+    <!-- useGeneratedKeys + keyProperty：把自增主键回填到入参对象的 id，
+         Service 可以直接拿它写 diary_tag，不用再查一次。
+         created_at / updated_at 交给数据库默认值（CURRENT_TIMESTAMP），
+         保证时间来源唯一（数据库时钟），避免应用与数据库时钟不一致
+         导致列表排序错乱。
+         deleted 也交给数据库默认值 0，不在插入时显式赋值 ——
+         "删过的日记不能通过插入接口复活"这类问题也就不会出现。 -->
+    <insert id="insert" parameterType="Diary"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO diary (user_id, title, content_ciphertext, mood, weather, location)
+        VALUES (#{userId}, #{title}, #{contentCiphertext}, #{mood}, #{weather}, #{location})
+    </insert>
+
+    <!-- ── 2. 按 ID + 归属查详情 ─────────────────────────────── -->
+    <!-- 查不到 与 不属于当前用户 都返回空 → Service 统一转 40401，
+         不区分两者，防止通过"404 还是 403"的差异枚举出哪些 ID 真实存在。 -->
+    <select id="selectByIdAndUserId" resultType="Diary">
+        SELECT
+        <include refid="diaryColumns"/>
+        FROM diary
+        WHERE id = #{id}
+        AND user_id = #{userId}
+        AND deleted = 0
+        LIMIT 1
+    </select>
+
+    <!-- ── 3. 按条件统计总数（分页用）────────────────────────── -->
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(1)
+        FROM diary
+        WHERE user_id = #{userId}
+        AND deleted = 0
+        <include refid="queryFilters"/>
+    </select>
+
+    <!-- ── 4. 分页查询列表 ───────────────────────────────────── -->
+    <!-- 排序：created_at DESC, id DESC。
+         加 id DESC 作为<b>第二排序键</b>是必须的，不是装饰：
+         同一秒内创建的日记（测试脚本、批量导入很容易出现）
+         created_at 完全相同，只按 created_at 排序时 MySQL 不保证
+         稳定顺序，翻页会出现"同一条日记在第 1 页和第 2 页都出现"
+         或者"某条日记一直看不到"。用主键打破平局即可解决。
+
+         刻意不在这里查标签：GROUP_CONCAT 有 1024 字节静默截断问题，
+         见 DiaryMapper.selectPageByUserId 的 Javadoc。 -->
+    <select id="selectPageByUserId" resultType="Diary">
+        SELECT
+        <include refid="diaryColumns"/>
+        FROM diary
+        WHERE user_id = #{userId}
+        AND deleted = 0
+        <include refid="queryFilters"/>
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{query.size} OFFSET #{query.offset}
+    </select>
+
+    <!-- ── 5. 更新日记 ───────────────────────────────────────── -->
+    <!-- ⚠️ WHERE 同时带 id 和 user_id —— 这是权限隔离的关键。
+         返回 0 表示"不存在或不属于该用户"，Service 据此抛 40401。
+
+         用"影响行数"而不是"先查后改"判断权限：
+         后者是两次数据库往返，且中间存在竞态窗口。
+
+         updated_at 不在这里赋值：表定义里有 ON UPDATE CURRENT_TIMESTAMP，
+         数据库自动维护。
+
+         ⚠️ 这里额外带了 deleted = 0：
+         虽然正常流程下（Service 先查再改）不会是删除状态，
+         但多加这一条能防住并发场景 —— 用户 A 点保存的同时
+         另一个标签页点了删除，没有这个条件就会"更新一篇已删除的日记"。
+         代价只是 WHERE 多一个等值判断（走的是同一个索引前缀）。 -->
+    <update id="updateByIdAndUserId" parameterType="Diary">
+        UPDATE diary
+        SET title = #{title},
+            content_ciphertext = #{contentCiphertext},
+            mood = #{mood},
+            weather = #{weather},
+            location = #{location}
+        WHERE id = #{id}
+        AND user_id = #{userId}
+        AND deleted = 0
+    </update>
+
+    <!-- ── 6. 软删除 ─────────────────────────────────────────── -->
+    <!-- 用软删除而不是物理 DELETE：删除日记要触发"来源记忆 + 向量"的
+         补偿任务（Phase 3 起），立即物理删除会让补偿任务失去依据。
+
+         WHERE 带 deleted = 0 的作用：重复删除时返回 0，
+         Service 可以据此返回 40401（幂等地表现为"已经不存在了"），
+         而不是"删除成功"（那会让用户以为删了两次两篇）。
+
+         刻意不清理 diary_tag 关联：软删除的日记已经查不出来
+         （所有查询都带 deleted = 0），关联行留着不影响正确性；
+         等账户清除（Phase 7）时统一物理清理。 -->
+    <update id="softDeleteByIdAndUserId">
+        UPDATE diary
+        SET deleted = 1
+        WHERE id = #{id}
+        AND user_id = #{userId}
+        AND deleted = 0
+    </update>
+
+</mapper>

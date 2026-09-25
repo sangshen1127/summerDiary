@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     DiaryAnalysisMapper —— 日记分析结果 SQL
+     ══════════════════════════════════════════════════════════════
+
+     ⚠️ 关于 JSON 列（emotion_json / topics_json / ...）
+        MySQL 的 JSON 列在 JDBC 里表现为字符串，所以实体用 String 承接，
+        写入时用 CAST(#{x} AS JSON) 显式声明类型。
+
+        为什么加 CAST：如果直接把字符串参数塞进 JSON 列，
+        Connector/J 会以 VARCHAR 发送，MySQL 靠隐式转换兜住 ——
+        大多数情况能work，但NULL 与空串的行为在不同驱动版本上有差异。
+        显式 CAST 让意图明确：这里就是要写 JSON。
+
+        ⚠️ 非法 JSON 会被 MySQL 直接拒绝（本次已在临时库实测过），
+        所以"写进去的是不是合法 JSON"不需要 Java 层再校验一遍。
+
+     ⚠️ 所有方法都带 user_id。本表的 user_id 是冗余列，
+        存在的唯一意义就是让权限条件能直接写在这里，
+        不必每次 JOIN diary。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.DiaryAnalysisMapper">
+
+    <sql id="analysisColumns">
+        id, user_id, diary_id, summary,
+        emotion_json, topics_json, entities_json,
+        recent_state_json, long_term_facts_json,
+        schema_version, prompt_version, created_at, updated_at
+    </sql>
+
+    <!-- ── 1. 写入或覆盖（ON DUPLICATE KEY UPDATE）───────────── -->
+    <!-- diary_id 有唯一键，所以重复时走 UPDATE 分支。
+
+         一条 SQL 完成 upsert 的好处：没有"先查→再决定"的竞态窗口。
+         重新分析时天然覆盖旧结果，不需要先删再插
+         （先删再插会有"删完插入失败"导致数据丢失的窗口）。
+
+         注意 user_id 也更新：它虽冗余，但必须与 diary 的归属保持一致。
+
+         CONCAT / CAST 说明：
+           - summary 是 TEXT，直接写
+           - *_json 是 JSON 列，用 CAST(... AS JSON) 显式声明 -->
+    <insert id="upsert" parameterType="DiaryAnalysis"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO diary_analysis
+        (user_id, diary_id, summary,
+         emotion_json, topics_json, entities_json,
+         recent_state_json, long_term_facts_json,
+         schema_version, prompt_version)
+        VALUES (#{userId},
+                #{diaryId},
+                #{summary},
+                CAST(#{emotionJson} AS JSON),
+                CAST(#{topicsJson} AS JSON),
+                CAST(#{entitiesJson} AS JSON),
+                CAST(#{recentStateJson} AS JSON),
+                CAST(#{longTermFactsJson} AS JSON),
+                #{schemaVersion},
+                #{promptVersion})
+        ON DUPLICATE KEY UPDATE
+            user_id = VALUES(user_id),
+            summary = VALUES(summary),
+            emotion_json = VALUES(emotion_json),
+            topics_json = VALUES(topics_json),
+            entities_json = VALUES(entities_json),
+            recent_state_json = VALUES(recent_state_json),
+            long_term_facts_json = VALUES(long_term_facts_json),
+            schema_version = VALUES(schema_version),
+            prompt_version = VALUES(prompt_version)
+    </insert>
+
+    <!-- ── 2. 按日记 + 归属查询 ─────────────────────────────── -->
+    <!-- 注意语义：「查不到」在这里是**正常情况**（日记还没分析过），
+         与 diary 表"查不到即越权"不同。Service 要区分对待。 -->
+    <select id="selectByDiaryIdAndUserId" resultType="DiaryAnalysis">
+        SELECT
+        <include refid="analysisColumns"/>
+        FROM diary_analysis
+        WHERE diary_id = #{diaryId}
+        AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <!-- ── 3. 删除某篇日记的分析 ────────────────────────────── -->
+    <!-- 带 user_id 是双保险：即使调用方传错 diaryId，
+         也不会删掉别人的数据。 -->
+    <delete id="deleteByDiaryIdAndUserId">
+        DELETE FROM diary_analysis
+        WHERE diary_id = #{diaryId}
+        AND user_id = #{userId}
+    </delete>
+
+</mapper>

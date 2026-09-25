@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     AiTaskMapper —— 异步任务表 SQL
+     ══════════════════════════════════════════════════════════════
+     规范（开发文档 §6.3）：
+       1. 禁止 SELECT *
+       2. 只用 #{}，禁止 ${}
+       3. 涉及用户数据的查询必须带 user_id
+
+     ⚠️ 本文件的枚举列（source_type / task_type / status）都必须显式写
+        typeHandler。原因：MyBatis 对枚举有多个内置处理器
+        （EnumTypeHandler 存 name、EnumOrdinalTypeHandler 存序号），
+        不显式指定时依赖自动推断 —— 一旦推断成 Ordinal，
+        数据库里会存成 0/1/2 这种数字，可读性全毁且极难排查。
+        显式写全限定类名最稳妥。
+
+     ⚠️ Worker 专用的 selectClaimable **刻意不带 user_id**（跨用户扫描
+        全局待办）。这是唯一一个不带 user_id 的方法，已在 Mapper
+        接口注释里写明，不要把它用在前端查询路径上。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.AiTaskMapper">
+
+    <!-- 可复用列清单 -->
+    <sql id="taskColumns">
+        id, user_id, source_type, source_id, task_type, status,
+        retry_count, error_code, error_message, idempotency_key,
+        version, prompt_version, started_at, finished_at, created_at, updated_at
+    </sql>
+
+    <!-- ── 1. 插入（幂等键重复会抛异常）──────────────────────── -->
+    <insert id="insert" parameterType="AiTask"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ai_task (user_id, source_type, source_id, task_type, status,
+                             retry_count, idempotency_key, version, prompt_version)
+        VALUES (#{userId},
+                #{sourceType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$SourceTypeHandler},
+                #{sourceId},
+                #{taskType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$TaskTypeHandler},
+                #{status, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$StatusHandler},
+                #{retryCount}, #{idempotencyKey}, #{version}, #{promptVersion})
+    </insert>
+
+    <!-- ── 2. 插入并忽略重复（入队路径用这个）───────────────── -->
+    <!-- ⚠️ INSERT IGNORE 会把"唯一键冲突"变成影响 0 行，
+         让幂等成为正常流程而不是异常路径。
+         注意它也会忽略其他警告（如截断），所以 DDL 的长度要留够。
+         created_at / updated_at 交给数据库默认值。 -->
+    <insert id="insertIgnoreDuplicate" parameterType="AiTask"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO ai_task (user_id, source_type, source_id, task_type, status,
+                                    retry_count, idempotency_key, version, prompt_version)
+        VALUES (#{userId},
+                #{sourceType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$SourceTypeHandler},
+                #{sourceId},
+                #{taskType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$TaskTypeHandler},
+                #{status, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$StatusHandler},
+                #{retryCount}, #{idempotencyKey}, #{version}, #{promptVersion})
+    </insert>
+
+    <!-- ── 3. 按 ID + 归属查询 ──────────────────────────────── -->
+    <select id="selectByIdAndUserId" resultType="AiTask">
+        SELECT
+        <include refid="taskColumns"/>
+        FROM ai_task
+        WHERE id = #{id}
+        AND user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <!-- ── 4. 按来源查任务 ──────────────────────────────────── -->
+    <select id="selectBySource" resultType="AiTask">
+        SELECT
+        <include refid="taskColumns"/>
+        FROM ai_task
+        WHERE user_id = #{userId}
+        AND source_type = #{sourceType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$SourceTypeHandler}
+        AND source_id = #{sourceId}
+        AND task_type = #{taskType, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$TaskTypeHandler}
+        LIMIT 1
+    </select>
+
+    <!-- ── 5. 扫描可执行任务（Worker 专用，跨用户）──────────── -->
+    <!-- ⚠️ 这个查询**故意不带 user_id** —— Worker 要处理全局待办。
+         它靠 idx_ai_task_status_created (status, created_at) 索引：
+         WHERE status IN (...) ORDER BY created_at LIMIT n
+         正好是索引的最左前缀 + 有序，不需要 filesort。
+
+         只取 PENDING 和 RETRYING（等重试的）。
+         RUNNING 不取：那可能是别的 Worker 正在跑，或是崩溃残留
+         （后者需要单独的超时回收机制，不属于 Phase 3）。 -->
+    <select id="selectClaimable" resultType="AiTask">
+        SELECT
+        <include refid="taskColumns"/>
+        FROM ai_task
+        WHERE status IN ('PENDING', 'RETRYING')
+        ORDER BY created_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <!-- ── 6. 原子抢占 ──────────────────────────────────────── -->
+    <!-- ⚠️⚠️ 本文件最关键的一条 SQL。
+         把"检查状态"和"改状态"合并成一条 UPDATE，由数据库行锁
+         保证只有一个调用者拿到（返回 1），其余返回 0。
+
+         如果拆成"先 SELECT 判断、再 UPDATE"，两个 Worker 会同时
+         通过判断、同时调用模型 → 重复计费 + 重复写分析结果。
+
+         started_at 在这里写入（本次执行的开始时间）。
+         error_code / error_message **不清空**：保留上一次的失败痕迹，
+         排查"重试后成功了但上次为什么失败"时有用。 -->
+    <update id="claimForRunning">
+        UPDATE ai_task
+        SET status = 'RUNNING',
+        started_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+        AND status IN
+        <foreach collection="fromStatuses" item="st" open="(" separator="," close=")">
+            #{st, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$StatusHandler}
+        </foreach>
+    </update>
+
+    <!-- ── 7. 标记成功 ──────────────────────────────────────── -->
+    <!-- 条件 status = 'RUNNING'：防止"任务已被取消，迟到的结果又把它改成 SUCCESS"。
+         取消是用户/系统的明确意图，不该被一个迟到的执行结果覆盖。
+
+         ⚠️ error_code / error_message 在成功时**清空**：
+         否则前端会看到"成功但有错误信息"的矛盾状态。 -->
+    <update id="markSuccess">
+        UPDATE ai_task
+        SET status = 'SUCCESS',
+        finished_at = CURRENT_TIMESTAMP,
+        error_code = NULL,
+        error_message = NULL,
+        prompt_version = COALESCE(#{promptVersion}, prompt_version)
+        WHERE id = #{id}
+        AND status = 'RUNNING'
+    </update>
+
+    <!-- ── 8. 标记失败 ──────────────────────────────────────── -->
+    <!-- retry_count 在这里 +1（而不是在"发起重试"时）：
+         失败是既成事实，先计数再决定是否重试，即使 Worker 之后崩了
+         计数也不会丢 —— 否则会出现"无限重试"。
+
+         error_message 由调用方保证已脱敏 + 已截断在 500 字符内。 -->
+    <update id="markFailed">
+        UPDATE ai_task
+        SET status = 'FAILED',
+        finished_at = CURRENT_TIMESTAMP,
+        retry_count = retry_count + 1,
+        error_code = #{errorCode},
+        error_message = #{errorMessage}
+        WHERE id = #{id}
+    </update>
+
+    <!-- ── 9. 转为等待重试 ──────────────────────────────────── -->
+    <update id="markRetrying">
+        UPDATE ai_task
+        SET status = 'RETRYING',
+        finished_at = NULL
+        WHERE id = #{id}
+        AND status = 'FAILED'
+    </update>
+
+    <!-- ── 10. 取消 ─────────────────────────────────────────── -->
+    <update id="markCancelled">
+        UPDATE ai_task
+        SET status = 'CANCELLED',
+        finished_at = CURRENT_TIMESTAMP,
+        error_code = 'CANCELLED',
+        error_message = #{reason}
+        WHERE id = #{id}
+        AND status IN ('PENDING', 'RUNNING', 'RETRYING')
+    </update>
+
+    <!-- ── 11. 重置以供重新执行 ─────────────────────────────── -->
+    <!-- ⚠️ 条件 status IN ('FAILED','SUCCESS','CANCELLED') 是必须的：
+         RUNNING 的任务不能被重置，否则会变成两个 Worker 同时跑
+         （一个在跑，另一个被新捞起来）。
+         PENDING/RETRYING 也没必要重置 —— 它们本来就会被捞。
+
+         ⚠️ CANCELLED 为什么也在里面：取消的原因是"来源（日记）不见了"。
+         若日记之后又可见（误删恢复等），用户点「重新分析」应当真的重排；
+         排除它的话会 UPDATE 影响 0 行，而前端因为 can_retry=true
+         仍然显示可点的按钮 —— 变成一个"点了没反应"的死按钮。
+
+         重置时清空 retry_count 与错误信息，让它像新任务一样。 -->
+    <update id="resetForRetry">
+        UPDATE ai_task
+        SET status = 'PENDING',
+        retry_count = 0,
+        error_code = NULL,
+        error_message = NULL,
+        started_at = NULL,
+        finished_at = NULL
+        WHERE id = #{id}
+        AND status IN ('FAILED', 'SUCCESS', 'CANCELLED')
+    </update>
+
+    <!-- ── 12. 统计 ─────────────────────────────────────────── -->
+    <select id="countByUserAndStatus" resultType="long">
+        SELECT COUNT(1)
+        FROM ai_task
+        WHERE user_id = #{userId}
+        AND status = #{status, typeHandler=com.sangshen.aidiary.config.mybatis.AiTaskTypeHandlers$StatusHandler}
+    </select>
+
+</mapper>

@@ -1,0 +1,80 @@
+# Docker Compose configuration
+# Used for local development and integration testing
+
+version: '3.8'
+
+services:
+  {{service_name}}:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{service_name}}
+    ports:
+      - "{{port}}:{{port}}"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://{{db_user}}:{{db_password}}@db:5432/{{db_name}}
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - /app/node_modules
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{port}}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: postgres:{{postgres_version}}-alpine
+    container_name: {{service_name}}-db
+    environment:
+      POSTGRES_DB: {{db_name}}
+      POSTGRES_USER: {{db_user}}
+      POSTGRES_PASSWORD: {{db_password}}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{db_user}}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:{{redis_version}}-alpine
+    container_name: {{service_name}}-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

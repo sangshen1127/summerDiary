@@ -1,0 +1,153 @@
+<template>
+  <div class="{{entity}}-view min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto">
+      <div class="bg-white rounded-lg shadow">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h1 class="text-2xl font-bold text-gray-900">{{Entity}} Management</h1>
+          <button
+            @click="showForm = true"
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            New {{Entity}}
+          </button>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="store.loading" class="p-6 text-center text-gray-500">
+          Loading...
+        </div>
+
+        <!-- Error State -->
+        <div
+          v-if="store.error"
+          class="m-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex justify-between items-center"
+        >
+          {{ store.error }}
+          <button @click="store.clearError()" class="text-red-700 hover:text-red-900">
+            ×
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div v-if="!store.loading" class="overflow-x-auto">
+          <{{Entity}}Table
+            :items="store.items"
+            :loading="store.loading"
+            @edit="handleEdit"
+            @delete="handleDelete"
+          />
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="store.totalPages > 1" class="px-6 py-4 border-t border-gray-200 flex justify-center gap-2">
+          <button
+            v-for="page in store.totalPages"
+            :key="page"
+            @click="goToPage(page)"
+            :class="[
+              'px-3 py-2 rounded-lg',
+              store.offset / store.limit + 1 === page
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-800 hover:bg-gray-300',
+            ]"
+          >
+            {{ page }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Modal -->
+    <div
+      v-if="showForm"
+      class="fixed inset-0 z-50 overflow-y-auto"
+      @click="closeForm"
+    >
+      <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+
+        <div
+          class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+          @click.stop
+        >
+          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div class="sm:flex sm:items-start">
+              <div class="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                  {{ store.currentItem ? 'Edit {{Entity}}' : 'Create {{Entity}}' }}
+                </h3>
+                <{{Entity}}Form
+                  :item="store.currentItem"
+                  :loading="store.loading"
+                  :error="store.error"
+                  @submit="handleFormSubmit"
+                  @cancel="closeForm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { use{{Entity}}Store } from '@/stores/{{entity}}.store';
+import type { Create{{Entity}}Request, Update{{Entity}}Request } from '@/types/{{entity}}';
+import {{Entity}}Table from './components/{{Entity}}Table.vue';
+import {{Entity}}Form from './components/{{Entity}}Form.vue';
+
+const store = use{{Entity}}Store();
+const showForm = ref(false);
+
+onMounted(() => {
+  store.fetchList();
+});
+
+const closeForm = () => {
+  showForm.value = false;
+  store.clearCurrent();
+};
+
+const handleEdit = async (id: number) => {
+  await store.fetchById(id);
+  showForm.value = true;
+};
+
+const handleDelete = async (id: number) => {
+  if (confirm('Are you sure you want to delete this {{entity}}?')) {
+    try {
+      await store.remove(id);
+    } catch (error) {
+      console.error('Failed to delete {{entity}}:', error);
+    }
+  }
+};
+
+const handleFormSubmit = async (payload: Create{{Entity}}Request | Update{{Entity}}Request) => {
+  try {
+    if (store.currentItem?.id) {
+      await store.update(store.currentItem.id, payload as Update{{Entity}}Request);
+    } else {
+      await store.create(payload as Create{{Entity}}Request);
+    }
+    closeForm();
+  } catch (error) {
+    console.error('Failed to save {{entity}}:', error);
+  }
+};
+
+const goToPage = (page: number) => {
+  const newOffset = (page - 1) * store.limit;
+  store.fetchList(newOffset, store.limit);
+};
+</script>
+
+<style scoped>
+.{{entity}}-view {
+  width: 100%;
+}
+</style>

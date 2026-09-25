@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- ══════════════════════════════════════════════════════════════
+     UserMapper —— 用户表 SQL
+     ══════════════════════════════════════════════════════════════
+     规范（开发文档 §6.3）：
+
+     1. 【禁止 SELECT *】必须显式列名。
+        理由：表结构变更时 SELECT * 会静默带回新列，可能把敏感字段
+        带进内存甚至响应体；显式列名让「读哪些字段」一目了然。
+
+     2. 【禁止字符串拼接】只用 #{} 占位符，不用 ${}。
+        ${} 是直接拼进 SQL 的，会造成注入。
+
+     3. 列名与 Java 属性的映射靠 map-underscore-to-camel-case
+        （application.yml 已配），所以不需要写 resultMap，
+        password_hash → passwordHash 自动完成。
+     ══════════════════════════════════════════════════════════════ -->
+
+<mapper namespace="com.sangshen.aidiary.mapper.UserMapper">
+
+    <!-- 可复用的列清单。用 <sql> 抽出，保证所有查询列名一致，
+         避免某处漏列导致字段为 null 这种难查的问题。 -->
+    <sql id="userColumns">
+        id, username, password_hash, nickname, ai_enabled, status, created_at, updated_at
+    </sql>
+
+    <!-- ── 按用户名查询（含密码哈希，登录用）─────────────────── -->
+    <select id="selectByUsername" resultType="User">
+        SELECT
+        <include refid="userColumns"/>
+        FROM `user`
+        WHERE username = #{username}
+        AND status &lt;&gt; 'DELETED'
+        LIMIT 1
+    </select>
+
+    <!-- ── 按主键查询 ────────────────────────────────────────── -->
+    <select id="selectById" resultType="User">
+        SELECT
+        <include refid="userColumns"/>
+        FROM `user`
+        WHERE id = #{id}
+        AND status &lt;&gt; 'DELETED'
+        LIMIT 1
+    </select>
+
+    <!-- ── 用户名是否已存在 ──────────────────────────────────── -->
+    <!-- 注意这里不排除 DELETED：用户名一旦用过就不允许再注册，
+         否则「删除账号后别人注册同名」会造成混淆，也可能被用来
+         冒充历史用户。软删除的用户名保持占用。 -->
+    <select id="countByUsername" resultType="int">
+        SELECT COUNT(1)
+        FROM `user`
+        WHERE username = #{username}
+    </select>
+
+    <!-- ── 插入 ──────────────────────────────────────────────── -->
+    <!-- useGeneratedKeys + keyProperty：把数据库生成的自增主键
+         回填到入参对象的 id 字段，Service 不用再查一次。
+         created_at / updated_at 交给数据库默认值（CURRENT_TIMESTAMP），
+         不在这里显式赋值 —— 保证时间来源唯一（数据库时钟），
+         避免应用服务器与数据库时钟不一致导致排序错乱。 -->
+    <insert id="insert" parameterType="User"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `user` (username, password_hash, nickname, ai_enabled, status)
+        VALUES (#{username}, #{passwordHash}, #{nickname}, #{aiEnabled}, #{status})
+    </insert>
+
+</mapper>

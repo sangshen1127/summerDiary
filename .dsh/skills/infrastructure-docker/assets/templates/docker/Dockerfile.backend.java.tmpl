@@ -1,0 +1,43 @@
+# Backend Dockerfile - Java (Spring Boot)
+# Multi-stage build for production
+
+# Stage 1: Builder
+FROM maven:{{maven_version}}-openjdk-{{java_version}} as builder
+
+WORKDIR /build
+
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Runtime
+FROM eclipse-temurin:{{java_version}}-jre
+
+WORKDIR /app
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+# Copy JAR from builder
+COPY --from=builder /build/target/*.jar app.jar
+
+# Change ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:{{port}}/actuator/health || exit 1
+
+# Expose port
+EXPOSE {{port}}
+
+# JVM optimizations
+ENV JAVA_OPTS="-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Djava.awt.headless=true"
+
+# Run application
+CMD ["java", "-jar", "app.jar"]

@@ -1,0 +1,56 @@
+# ══════════════════════════════════════════════════════════════
+# 生产环境配置
+# ══════════════════════════════════════════════════════════════
+# 通过 SPRING_PROFILES_ACTIVE=prod 激活。
+#
+# ⚠️ 本文件的核心目标只有一个：**不泄露任何敏感信息**。
+#    见开发文档 §5.4 的日志红线与 §9.4 的生产部署要求。
+#
+# 上生产前的检查清单（Phase 8 逐条验证）：
+#   [ ] .env 未提交 Git，DIARY_ENCRYPTION_KEY 与本地不同
+#   [ ] AUTH_COOKIE_SECURE=true，且站点已启用 HTTPS
+#   [ ] 日志中搜不到日记正文、密码、Cookie、API Key
+#   [ ] SQL 参数日志已关闭
+#   [ ] 错误响应不含堆栈
+# ══════════════════════════════════════════════════════════════
+
+logging:
+  level:
+    root: WARN
+    com.sangshen.aidiary: INFO
+    # ⚠️ 绝不打开 mapper 的 DEBUG —— MyBatis 会把 SQL 参数打进日志，
+    #    而 diary 表的参数就是密文，memory 表的是明文记忆摘要。
+    com.sangshen.aidiary.mapper: INFO
+    org.springframework: WARN
+    com.zaxxer.hikari: WARN
+
+spring:
+  datasource:
+    hikari:
+      # 生产环境数据库连不上就应该启动失败，而不是带病运行
+      initialization-fail-timeout: 1
+
+mybatis:
+  configuration:
+    # ⚠️ 生产环境关闭 SQL 日志
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+server:
+  error:
+    # 不向外暴露任何错误细节
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+  # 生产必须走 HTTPS（Nginx 终结 TLS）
+  forward-headers-strategy: native
+
+management:
+  endpoint:
+    health:
+      # 生产环境不显示数据库连接串、磁盘路径等内部信息
+      show-details: when-authorized
+
+app:
+  ai:
+    use-mock-when-no-key: false

@@ -1,0 +1,39 @@
+﻿[browser-check] 注册 zzfe82084 → HTTP 201
+[browser-check] 登录 → HTTP 200
+[browser-check] 已造 3 篇日记 + 2 个标签，主日记 id=487
+[browser-check] 启动 headless Edge…
+[browser-check] 已注入会话 cookie
+[browser-check] 截图 → 01-日记列表.png
+[browser-check] 截图 → 02-日记详情.png
+[browser-check] 截图 → 03-编辑日记.png
+[browser-check] 截图 → 04-写日记.png
+[browser-check] 截图 → 05-列表页-375px.png
+
+======================================================================
+[PASS] 列表页渲染出日记标题
+[PASS] 列表页显示标签
+[PASS] 列表页渲染出筛选控件（搜索框 + 心情/标签下拉 + 搜索按钮）
+[PASS] ★ 看板娘图片真的加载成功（naturalWidth > 0）
+[PASS] ★ 看板娘在桌面宽度下可见（未被隐藏）
+[PASS] 看板娘应用了呼吸动效
+[PASS] ★ 顶栏品牌图标是看板娘图片且加载成功
+[PASS] 顶栏图标用了与认证页相同的裁剪参数（同一个角色不会显示成两个样）
+[PASS] 列表页无 console 错误 / 异常
+[PASS] 详情页显示完整正文（含换行内容）
+[PASS] 详情页显示 AI 区块
+[PASS] ★ AI 区块落在 Phase 3 的合法状态之一（尚未分析 / 分析中 / 有结果）
+[PASS] ★ AI 区块没有落到"取状态失败"兜底态（那是请求失败，与"分析失败"是两件事）
+[PASS] 详情页无 console 错误 / 异常
+[PASS] 编辑页标题显示"编辑日记"
+[PASS] ★★ 编辑页正文框已填入原文（证明先加载了详情，不会用空内容覆盖）
+[PASS] 编辑页标题框已填入原标题
+[PASS] 编辑页无 console 错误 / 异常
+[PASS] 新建页标题显示"写日记"
+[PASS] 新建页正文框为空（不是编辑模式）
+[PASS] 新建页无 console 错误 / 异常
+[PASS] ★★ 375px 下无横向溢出（响应式铁律）
+[PASS] ★ 375px 下看板娘被隐藏（不遮挡内容）
+[PASS] 375px 列表页无 console 错误 / 异常
+======================================================================
+通过: 24   失败: 0
+截图目录: D:\summerDiary\_verify\shots

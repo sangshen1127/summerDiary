@@ -1,0 +1,147 @@
+# ══════════════════════════════════════════════════════════════
+# AI 日记系统 —— 本地依赖服务
+# ══════════════════════════════════════════════════════════════
+# 用法：
+#   docker compose up -d mysql chroma     # 启动依赖服务
+#   docker compose ps                     # 查看状态
+#   docker compose logs -f mysql          # 看日志
+#   docker compose down                   # 停止（保留数据）
+#   docker compose down -v                # 停止并删除数据卷（会清空数据！）
+#
+# backend 服务默认不在 compose 里跑 —— 开发时在宿主机运行更方便调试。
+# 需要容器化时用：docker compose --profile full up -d
+#
+# ⚠️ container_name 是固定值，为的是验收命令好写（docker exec -it ai-diary-mysql）。
+#    如果和同学共用一台机器，请各自改掉 container_name 和端口，避免冲突。
+# ══════════════════════════════════════════════════════════════
+
+name: ai-diary
+
+services:
+
+  # ────────────────────────────────────────────────────────────
+  # MySQL 8.0 —— 关系库
+  # ────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: ai-diary-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: ${DB_NAME:-ai_diary}
+      MYSQL_USER: ${DB_USERNAME:-ai_diary}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
+      TZ: UTC
+    command:
+      # 项目所有时间统一存 UTC（开发文档 §4.4）
+      - --default-time-zone=+00:00
+      # 中文内容必须用 utf8mb4，否则 emoji 和生僻字会乱码
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      # 开发期打开慢查询日志，方便发现缺索引的 SQL
+      - --slow-query-log=1
+      - --long-query-time=1
+    ports:
+      # ⚠️ 宿主机端口默认用 3307，不是 3306。
+      #
+      # 原因：很多同学的本机已经装了 MySQL 服务（Windows 服务 MySQL80），
+      # 它长期占用 3306。若这里也映射 3306，docker compose up 会报
+      #   ports are not available: exposing port TCP 0.0.0.0:3306 ...
+      #   bind: Only one usage of each socket address ...
+      #
+      # 映射到 3307 的好处：
+      #   1. 项目完全自包含，不依赖也不影响本机已装的 MySQL
+      #   2. 谁的机器上都能一把起来，不用先关服务
+      #   3. 本机 MySQL80 里你原有的数据/课程练习都不受影响
+      #
+      # 想用 3306 也可以：先在「服务」里停掉 MySQL80，再把 .env 的 DB_PORT 改成 3306。
+      #
+      # 注意「容器内始终是 3306」，只有宿主机映射端口是 3307，
+      # 所以 backend 容器里连的是 mysql:3306，宿主机上的后端连的是 localhost:3307。
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 注意：健康检查在容器内执行，所以端口是 3306
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_ROOT_PASSWORD:-change-me-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  # ────────────────────────────────────────────────────────────
+  # Chroma —— 向量库（Phase 5 语义检索才用得到，可以提前起好）
+  # ────────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: ai-diary-chroma
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    healthcheck:
+      # ══════════════════════════════════════════════════════
+      # 为什么这么写（实测结论，别再改回去）
+      # ══════════════════════════════════════════════════════
+      # chromadb/chroma:latest（Chroma 1.0.0，基于 Debian 13）镜像里
+      # **没有** curl、wget、python、python3、nc —— 只有 bash。
+      # 所以只能借 bash 内建的 /dev/tcp 做 TCP 端口探测。
+      #
+      # 曾踩过的两个坑：
+      #   1. 用 curl        → "/bin/sh: 1: curl: not found"，容器一直 unhealthy
+      #   2. 用 python -c    → 镜像里根本没有 python
+      #
+      # ⚠️ 本检查的能力边界（要诚实）：
+      #    它只证明「8000 端口在监听」，**不能**证明 HTTP 层正常。
+      #    Chroma 是单进程服务，端口在监听基本等于服务可用，够用。
+      #    真要验证 HTTP，得把镜像换成自带 curl 的，或自建镜像 ——
+      #    本项目不值得为此增加运维负担（开发文档 §2.2 明确不做过度设计）。
+      #
+      # 另外注意接口路径：Chroma 1.x 的心跳是 /api/v2/heartbeat，
+      # 老的 /api/v1/heartbeat 已返回 410 Gone。这里没用到路径，但留个记录。
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ────────────────────────────────────────────────────────────
+  # 后端（可选）—— 默认不启动
+  # ────────────────────────────────────────────────────────────
+  backend:
+    profiles: ["full"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-diary-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # 容器内用服务名访问，不是 localhost
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-ai_diary}
+      DB_USERNAME: ${DB_USERNAME:-ai_diary}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DIARY_ENCRYPTION_KEY: ${DIARY_ENCRYPTION_KEY}
+      AI_ANALYSIS_ENABLED: ${AI_ANALYSIS_ENABLED:-false}
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_CHAT_MODEL: ${AI_CHAT_MODEL}
+      VECTOR_DB_URL: http://chroma:8000
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+
+volumes:
+  mysql-data:
+    name: ai-diary-mysql-data
+  chroma-data:
+    name: ai-diary-chroma-data

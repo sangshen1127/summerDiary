@@ -1,0 +1,61 @@
+# Docker ignore file - reduces build context size
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dependencies
+node_modules/
+vendor/
+venv/
+__pycache__/
+*.egg-info/
+
+# Build outputs
+dist/
+build/
+*.jar
+*.war
+*.exe
+*.o
+*.so
+*.dylib
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+
+# Documentation
+docs/
+README.md
+LICENSE
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Development
+.env
+.env.*.local

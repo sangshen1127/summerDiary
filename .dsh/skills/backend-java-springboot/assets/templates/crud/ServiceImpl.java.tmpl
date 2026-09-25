@@ -1,0 +1,98 @@
+package {{package}}.service.impl;
+
+import {{package}}.api.v1.dto.{{Entity}}Request;
+import {{package}}.api.v1.dto.{{Entity}}Response;
+import {{package}}.domain.{{Entity}};
+import {{package}}.repository.{{Entity}}Mapper;
+import {{package}}.service.{{Entity}}Service;
+import {{package}}.exception.BusinessException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.stream.Collectors;
+
+/**
+ * {{Entity}} service implementation
+ */
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class {{Entity}}ServiceImpl implements {{Entity}}Service {
+
+    private final {{Entity}}Mapper {{entity}}Mapper;
+
+    @Override
+    @Transactional
+    public {{Entity}}Response create({{Entity}}Request request) {
+        log.info("Creating {{entity}}: {}", request);
+        
+        {{Entity}} {{entity}} = {{Entity}}.builder()
+                // Map request fields to entity
+                .build();
+
+        {{entity}}Mapper.insert({{entity}});
+        log.info("{{Entity}} created with id: {}", {{entity}}.getId());
+        
+        return toResponse({{entity}});
+    }
+
+    @Override
+    public {{Entity}}Response getById(Long id) {
+        log.info("Fetching {{entity}} by id: {}", id);
+        
+        {{Entity}} {{entity}} = {{entity}}Mapper.selectById(id);
+        if ({{entity}} == null) {
+            throw new BusinessException("{{Entity}} not found with id: " + id);
+        }
+
+        return toResponse({{entity}});
+    }
+
+    @Override
+    public IPage<{{Entity}}Response> getAll(Page<{{Entity}}> page) {
+        log.info("Fetching all {{entity}}s with pagination: {}", page);
+        
+        IPage<{{Entity}}> entityPage = {{entity}}Mapper.selectPage(page, null);
+        return entityPage.convert(this::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public {{Entity}}Response update(Long id, {{Entity}}Request request) {
+        log.info("Updating {{entity}} with id: {}", id);
+        
+        {{Entity}} {{entity}} = {{entity}}Mapper.selectById(id);
+        if ({{entity}} == null) {
+            throw new BusinessException("{{Entity}} not found with id: " + id);
+        }
+
+        // Map request fields to entity
+        {{entity}}Mapper.updateById({{entity}});
+        
+        return toResponse({{entity}});
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        log.info("Deleting {{entity}} with id: {}", id);
+        
+        {{Entity}} {{entity}} = {{entity}}Mapper.selectById(id);
+        if ({{entity}} == null) {
+            throw new BusinessException("{{Entity}} not found with id: " + id);
+        }
+        
+        {{entity}}Mapper.deleteById(id);
+    }
+
+    private {{Entity}}Response toResponse({{Entity}} {{entity}}) {
+        return {{Entity}}Response.builder()
+                .id({{entity}}.getId())
+                // Map entity fields to response
+                .build();
+    }
+}

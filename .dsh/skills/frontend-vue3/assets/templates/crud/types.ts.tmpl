@@ -1,0 +1,30 @@
+/**
+ * {{Entity}} domain types
+ */
+
+export interface {{Entity}} {
+  id: number;
+  {{fields}}
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Create{{Entity}}Request {
+  {{fields}}
+}
+
+export interface Update{{Entity}}Request {
+  {{fields}}
+}
+
+export interface {{Entity}}ListResponse {
+  data: {{Entity}}[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface {{Entity}}Response {
+  data: {{Entity}};
+  message?: string;
+}

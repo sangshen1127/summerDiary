@@ -1,0 +1,115 @@
+<template>
+  <form @submit.prevent="handleSubmit" class="{{entity}}-form space-y-6">
+    {{form_fields}}
+
+    <div class="flex gap-4">
+      <button
+        type="submit"
+        :disabled="loading"
+        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {{ isEdit ? 'Update' : 'Create' }} {{Entity}}
+      </button>
+      <button
+        type="button"
+        @click="emit('cancel')"
+        class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400"
+      >
+        Cancel
+      </button>
+    </div>
+
+    <div v-if="error" class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+      {{ error }}
+    </div>
+  </form>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import type { {{Entity}}, Create{{Entity}}Request, Update{{Entity}}Request } from '@/types/{{entity}}';
+
+interface Props {
+  item?: {{Entity}} | null;
+  loading?: boolean;
+  error?: string | null;
+}
+
+interface Emits {
+  (e: 'submit', payload: Create{{Entity}}Request | Update{{Entity}}Request): void;
+  (e: 'cancel'): void;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+});
+
+const emit = defineEmits<Emits>();
+
+const formData = ref<Create{{Entity}}Request>({
+  // Initialize fields here
+});
+
+const isEdit = ref(false);
+
+watch(
+  () => props.item,
+  (newItem) => {
+    if (newItem) {
+      isEdit.value = true;
+      Object.keys(newItem).forEach((key) => {
+        if (key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
+          (formData.value as any)[key] = (newItem as any)[key];
+        }
+      });
+    } else {
+      isEdit.value = false;
+      resetForm();
+    }
+  }
+);
+
+const resetForm = () => {
+  Object.keys(formData.value).forEach((key) => {
+    (formData.value as any)[key] = '';
+  });
+};
+
+const handleSubmit = () => {
+  emit('submit', formData.value);
+};
+</script>
+
+<style scoped>
+.{{entity}}-form {
+  max-width: 600px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+</style>

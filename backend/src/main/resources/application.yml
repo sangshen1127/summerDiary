@@ -1,0 +1,238 @@
+# ══════════════════════════════════════════════════════════════
+# AI 日记系统 —— 公共配置
+# ══════════════════════════════════════════════════════════════
+# 分层约定（避免和同学的 AI 模块互相覆盖配置）：
+#   application.yml        公共配置 + 环境变量占位（本文件）
+#   application-dev.yml    开发环境（可开 SQL 日志）
+#   application-prod.yml   生产环境（必须关 SQL 日志）
+#   application-ai.yml     AI 相关配置 —— 同学主改这个文件
+#
+# ⚠️ 环境变量在 application.yml 里给默认值，方便「没配 .env 也能启动」。
+#    真实的密码和密钥只从 .env 读，绝不写进本文件。
+# ══════════════════════════════════════════════════════════════
+
+server:
+  port: ${SERVER_PORT:8080}
+  # 优雅停机：等待正在处理的请求完成，避免 AI 任务被硬中断
+  shutdown: graceful
+  # 容器部署时正确识别客户端 IP（Nginx 反代场景）
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      # 会话有效期 7 天。
+      # ⚠️ Boot 默认只有 30 分钟 —— 对日记应用太短，
+      #    用户写到一半隔了一小时回来发现被登出，体验很差。
+      #    注意这里用的是服务端会话超时，与 Cookie 的 MaxAge（会话级）
+      #    是两套机制，由本处唯一决定生命周期，避免两处配置打架。
+      timeout: ${AUTH_SESSION_TIMEOUT:7d}
+
+# ── 会话 Cookie 属性（由 SessionConfig 读取）────────────────────
+# ⚠️ 这里必须显式写 ${环境变量:默认值}，不能省。
+#
+#   原因：Spring 的占位符解析是从 Environment 里查 key，
+#   而 .env 通过 DotenvEnvironmentPostProcessor 注入的属性名是
+#   「DB_PASSWORD」「AUTH_COOKIE_SECURE」这种大写形式。
+#   若不在这里做映射，SessionConfig 里的
+#   ${auth.cookie.secure:false} 就<b>永远拿不到</b> .env 里的值，
+#   只会用默认值 false —— 生产环境部署时这个失误是致命的
+#   （会话 Cookie 会在明文 HTTP 上传输）。
+auth:
+  cookie:
+    name: ${AUTH_COOKIE_NAME:AI_DIARY_SESSION}
+    # 生产必须 true（需 HTTPS）；本地开发用 false，否则 Cookie 发不出去
+    secure: ${AUTH_COOKIE_SECURE:false}
+
+spring:
+  application:
+    name: ai-diary-backend
+
+  # ⚠️ 关键：显式 import AI 配置。
+  #    Spring Boot 只会自动加载「application-{profile}.yml」这种命名，
+  #    而 application-ai.yml 里的 "ai" 不是 profile（我们的 profile 是 dev/prod），
+  #    所以必须显式 import，否则里面的配置全部不生效。
+  #    这样拆分的目的是让 AI 模块负责人只改自己的文件，不碰主配置。
+  config:
+    import: classpath:application-ai.yml
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # ── 数据库 ──────────────────────────────────────────────────
+  datasource:
+    # ⚠️ characterEncoding 必须写 UTF-8，不能写 utf8mb4！
+    #    utf8mb4 是 MySQL 服务端的字符集名，不是合法的 Java charset 名，
+    #    写成 characterEncoding=utf8mb4 会让 Connector/J 直接抛
+    #    java.io.UnsupportedEncodingException: utf8mb4，连接根本建立不起来。
+    #    （这是网上大量教程抄错的一个配置）
+    #
+    #    正确做法：
+    #      characterEncoding=UTF-8        告诉 JDBC 用 UTF-8 编解码
+    #      connectionCollation=...        让服务端按 utf8mb4 处理，emoji 才存得下
+    #
+    # ⚠️ DB_PORT 默认值必须是 3307，与 docker-compose.yml 一致。
+    #    本机常有 MySQL80 服务占用 3306，项目容器映射到 3307 避开。
+    #    若这里写 3306，一旦 .env 未加载就会连到「本机另一个 MySQL」，
+    #    报出让人误解的 Access denied，排查方向会被带偏。
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:ai_diary}?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:ai_diary}
+    # 兜底值 change-me 是「占位值」而非可用密码：一旦用到它，
+    # StartupConfigDiagnostics 会直接让启动失败并给出修复步骤。
+    password: ${DB_PASSWORD:change-me}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+#    数据库连接池
+    hikari:
+      pool-name: AiDiaryHikariPool
+      maximum-pool-size: 10   # 最大连接数
+      minimum-idle: 2   # 最小空闲连接数
+      connection-timeout: 10000   # 连接超时时间
+      idle-timeout: 600000   # 空闲超时时间
+      max-lifetime: 1800000   # 连接最大生命周期
+      # ⚠️ 开发期：数据库没起来时也允许应用启动，这样 /actuator/health 能回 503
+      #    （带 db 详情）而不是整个应用起不来，便于定位问题。
+      #    生产环境会由 application-prod.yml 覆盖为 false。
+      initialization-fail-timeout: -1
+
+  # ── JSON 序列化（契约核心，见开发文档 §4.4 / §4.5）──────────
+  jackson:
+    # 时间统一 UTC，序列化为 ISO-8601
+    time-zone: UTC
+    # 不把 Date 序列化成时间戳数字
+    serialization:
+      write-dates-as-timestamps: false
+      # 不返回 null 字段？不 —— 契约要求字段不省略，让前端类型好写
+      fail-on-empty-beans: false
+    deserialization:
+      # 遇到未知字段不报错，便于前后端不同步时平滑过渡
+      fail-on-unknown-properties: false
+    # Long 型 id 序列化成字符串，避免 JS Number 精度丢失（雪花 ID 场景）
+    # Phase 0 用自增主键，暂不开启，等需要时打开
+    default-property-inclusion: always
+    # ⚠️ 刻意不配置 spring.jackson.property-naming-strategy（全局 SNAKE_CASE）。
+    #
+    #   原因：我们的字段大多数本来就是单字（id / username / password / title /
+    #   summary / mood），全局转换会产生一堆「同名词但理由不同」的字段，
+    #   而且一旦有人给字段加显式 @JsonProperty，就出现两套规则并存的混乱。
+    #
+    #   采用的做法：**默认让 JSON 名 = Java 属性名**，
+    #   只在名字真的不一致时用 @JsonProperty 显式标注，例如：
+    #       @JsonProperty("created_at")  private LocalDateTime createdAt;
+    #       @JsonProperty("ai_enabled")  private boolean aiEnabled;
+    #
+    #   这个约定与前端 src/types/*.ts 的字段名严格一一对应，
+    #   阅读后端 DTO 就能直接知道接口返回什么，不需要心算转换规则。
+    #
+    #   ⚠️ 新增任何字段时：若名字含大写字母，必须确认前端类型文件同步更新。
+
+  # ── 数据库迁移 ──────────────────────────────────────────────
+  # ⚠️ 关于 enabled 的取值，这里有个刻意的取舍：
+  #
+  #   生产环境：必须 true，且数据库连不上就该启动失败（快速失败优于带病运行）
+  #   开发环境：由 application-dev.yml 覆盖为 false
+  #
+  #   为什么开发环境要 false：Flyway 的 init 方法在上下文启动时执行，
+  #   数据库没起来会导致整个应用起不来，于是连 /actuator/health 都访问不了，
+  #   反而无法判断「是数据库没起还是代码有问题」。
+  #   关掉之后，Hikari 用 initialization-fail-timeout=-1 允许启动，
+  #   /actuator/health 会返回 503 并带上 db 组件的失败原因，定位快得多。
+  #
+  #   Phase 1 加入 V1__init.sql 等真实迁移脚本后，测试迁移是否生效请用：
+  #     mvn spring-boot:run -Dspring-boot.run.arguments=--spring.flyway.enabled=true
+  #   或临时把 dev 里的 enabled 改成 true（前提是 MySQL 已经起来）。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    # 已执行的脚本永不修改，需要变更就加新版本号（开发文档 §7.2）
+    clean-disabled: true
+
+  # ── 线程池（AI 异步任务用，Phase 3 启用）────────────────────
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 8
+        queue-capacity: 100
+      thread-name-prefix: ai-task-
+      shutdown:
+        # 停机时等任务跑完，避免 AI 任务被腰斩
+        await-termination: true
+        await-termination-period: 30s
+
+# ── MyBatis ───────────────────────────────────────────────────
+mybatis:
+  # XML 映射文件位置
+  mapper-locations: classpath*:mapper/**/*.xml
+  # entity 包，允许 XML 里用简写类名（resultType="Diary"）
+  type-aliases-package: com.sangshen.aidiary.entity
+  # ── 枚举 TypeHandler（Phase 3 加入）──────────────────────────
+  # ⚠️ 必须显式扫描并注册，理由见 AbstractEnumNameTypeHandler 的注释：
+  #    MyBatis 默认的枚举处理器在版本间变过（曾经是 ordinal），
+  #    一旦退化成存序号，数据库里就是 0/1/2，
+  #    而且"往枚举中间插一个值"会让所有历史数据语义错位。
+  #    用自定义 handler 固定为存 name()，行为可验证。
+  type-handlers-package: com.sangshen.aidiary.config.mybatis
+  configuration:
+    # 数据库下划线字段 → Java 驼峰属性，例如 created_at → createdAt
+    map-underscore-to-camel-case: true
+    # ⚠️ 只在 dev 打开 SQL 日志；prod 由 application-prod.yml 覆盖为 NoLoggingImpl
+    #    原因：参数日志可能打出日记正文（开发文档 §5.4 红线）
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    # 返回 null 的字段也参与映射，避免 Map 结果缺 key
+    call-setters-on-nulls: true
+    # 禁止一级缓存跨会话，避免读到脏数据
+    local-cache-scope: STATEMENT
+
+# ── 日记 ──────────────────────────────────────────────────────
+diary:
+  # 日记正文 AES-256-GCM 加密密钥（Base64 编码的 32 字节）。
+  #
+  # ⚠️ 这里必须写 ${DIARY_ENCRYPTION_KEY:} 显式映射，不能省。
+  #    踩过的坑（模块 2-1 实测）：曾经以为 Spring Boot 的「宽松绑定」会自动把
+  #    环境变量 DIARY_ENCRYPTION_KEY 绑到 diary.encryption-key 上 —— 不会。
+  #
+  #    宽松绑定解决的是「同一个属性名的不同拼法」之间的等价：
+  #        DIARY_ENCRYPTIONKEY / diary.encryptionkey / diary.encryption-key
+  #    它不会把一个单词拆成两段（DIARY_ENCRYPTION_KEY 里没有点号，
+  #    无法推导出 diary 和 encryption-key 的分界）。
+  #
+  #    症状：.env 明明读到了值（StartupConfigDiagnostics 报「已读到(长度 44)」），
+  #    但 DiaryProperties.encryptionKey 拿到的是空字符串，启动失败。
+  #    项目里其他环境变量（DB_PASSWORD、AUTH_COOKIE_NAME…）能生效，
+  #    正是因为 application.yml 里都写了这样的 ${ENV_VAR} 显式引用。
+  #
+  # 兜底值为空字符串而非可用密钥：见 DiaryProperties 的说明 ——
+  # 给默认密钥会让漏配的人一直用公开密钥加密日记。
+  encryption-key: ${DIARY_ENCRYPTION_KEY:}
+
+# ── 健康检查 ──────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只暴露 health；后续需要指标时再加 metrics / prometheus
+        include: health,info
+  endpoint:
+    health:
+      # 始终显示 db 等组件的详情，便于开发期定位「数据库没起来」
+      show-details: always
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: AI 日记系统
+    description: 带长期记忆与语义检索的 AI 日记后端
+    version: 0.1.0-SNAPSHOT
+
+# ── 日志（红线：不含正文、Token、API Key、完整 Prompt）─────────
+logging:
+  level:
+    root: INFO
+    com.sangshen.aidiary: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

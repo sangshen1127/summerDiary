@@ -1,0 +1,844 @@
+/* ══════════════════════════════════════════════════════════════════
+   「森语时光」设计系统 · 主题样式（theme.css）
+   ══════════════════════════════════════════════════════════════════
+   提取来源：D:\summerDiary\美术风格预览.html
+             （已定稿并通过评审的美术风格预览页，其内联样式表位于第 32–856 行）
+   提取日期：2026-09-23
+   提取范围：预览页中「可被产品复用」的部分 ——
+             · 设计 Token（预览页 36–154 行，逐字搬运）
+             · 组件：卡片 / 按钮 / 输入框 / 标签 / 情绪徽标 / 提示条 /
+               日记列表项 / 日历 / AI 对话气泡 / 空状态 / 加载动画
+             · 动效关键帧与无障碍降级
+
+   ⚠️ 改设计请同步预览页！
+      本文件的 token 值、组件尺寸、圆角、阴影、动效曲线全部一一对应预览页，
+      没有做二次创作。要调整视觉，请先改 美术风格预览.html 并复核，
+      再同步回本文件 —— 否则两边会漂移，预览页就失去「唯一事实来源」的意义。
+
+   本文件是自包含的：
+     · 不依赖、也不修改 frontend/src/styles/global.css
+     · 不依赖任何外部资源：纹理全部是 CSS 渐变与内联 SVG data URI
+     · 不含任何 HTML 标签
+
+   引入方式（二选一，由接入方决定）：
+     a) main.ts：import './styles/theme.css'，放在 import './styles/global.css' 之后
+     b) global.css 顶部：@import './theme.css';
+   两种都生效 —— 因为下面的变量兼容层与页面基础都刻意提高了选择器权重，
+   不依赖「谁后引入谁赢」（详见第 02、03 节的注释）。
+
+   目录：
+     01 设计 Token（--c-* / --n-* / --bg-* / --text-* / --border* /
+                    --r-* / --sp-* / --sd-* / --tx-* / --ease-* / --dur-*）
+     02 Element Plus / 既有组件的兼容映射层（--ad-* / --el-*）
+     03 页面基础
+     04 卡片 .card
+     05 按钮 .btn
+     06 输入框 .field
+     07 标签与情绪徽标 .tag / .mood
+     08 提示条 .alert
+     09 日记列表项 .diary
+     10 日历 .cal
+     11 AI 对话气泡 .chat / .bubble / .typing
+     12 空状态 .empty / .sprite
+     13 加载动画 .loader / .skel / .ring
+     14 动效关键帧 + 无障碍
+   ══════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════
+   01 设计 Token
+   ──────────────────────────────────────────────────────────────────
+   与预览页第 36–154 行完全一致，命名保持原样（--c-* / --n-* / …），
+   方便和预览页逐行对照。
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+
+  /* ── 主色 ───────────────────────────────────────────────── */
+  --c-mist:      #F7F4EC;   /* 晨雾白   页面底 */
+  --c-sage:      #A8BFA5;   /* 鼠尾草绿 主品牌色 */
+  --c-haze:      #A9C3D6;   /* 雾蓝     信息/链接 */
+  --c-wood:      #D8C3A5;   /* 浅木色   分隔/次要元素 */
+  --c-cream:     #FFF9F0;   /* 奶油白   卡片底 */
+
+  /* ── 辅助色 ─────────────────────────────────────────────── */
+  --c-moss:      #6F8F6A;   /* 苔藓绿   成功态 */
+  --c-honey:     #E8C87A;   /* 蜂蜜黄   高亮/警告 */
+  --c-lilac:     #B9A7C9;   /* 干花紫   记忆/画像模块 */
+  --c-maple:     #C97B6A;   /* 枫叶红   点缀 —— 全屏占比 <2% */
+
+  /* ── 中性色阶：带绿灰倾向，不用纯灰（纯灰会显冷）────────── */
+  --n-900:       #3A4238;   /* 标题 */
+  --n-700:       #55604F;   /* 正文 */
+  --n-500:       #7C8778;   /* 次级文字 */
+  --n-400:       #9BA695;   /* 三级文字 */
+  --n-300:       #B8C2B2;   /* 占位符 */
+  --n-200:       #D6DDD1;   /* 边框 */
+  --n-100:       #E6EBE2;   /* 细边框 */
+
+  /* ── 派生浅底：用于状态背景，保持低饱和 ──────────────── */
+  --bg-sage-soft:  #EAF0E7;
+  --bg-haze-soft:  #E8F0F6;
+  --bg-honey-soft: #FBF2DC;
+  --bg-lilac-soft: #F0EBF5;
+  --bg-maple-soft: #F8E8E4;
+  --bg-moss-soft:  #E5EDE3;
+  --bg-wood-soft:  #F2E9DC;
+
+  /* ── 语义映射：组件只引用这一层 ─────────────────────── */
+  --bg-page:        var(--c-mist);
+  --bg-card:        var(--c-cream);
+  --bg-input:       #FFFDF8;
+  --bg-hover:       var(--bg-sage-soft);
+  --bg-pressed:     #DFE7DB;
+  --bg-glass:       rgba(255, 249, 240, .62);
+
+  --text-title:     var(--n-900);
+  --text-primary:   var(--n-700);
+  --text-secondary: var(--n-500);
+  --text-tertiary:  var(--n-400);
+  --text-placeholder: var(--n-300);
+
+  --border:         var(--n-200);
+  --border-soft:    var(--n-100);
+  --border-strong:  var(--c-wood);
+
+  --brand:          var(--c-sage);
+  --brand-deep:     var(--c-moss);
+  --info:           var(--c-haze);
+  --success:        var(--c-moss);
+  --warn:           #C9A44C;
+  --danger:         var(--c-maple);
+  --memory:         var(--c-lilac);
+
+  /* ── 字体：系统圆体优先，零网络依赖 ───────────────────── */
+  /* 标题：需要"手写感圆体"。
+     优先 PingFang SC（macOS/iOS 中文圆润感最好），
+     Windows 走微软雅黑，最后降级衬线。
+     刻意不引外部圆体 —— 可商用的中文圆体普遍偏"萌"，
+     与"安静治愈"的定位冲突。 */
+  --font-round: "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC",
+                "MiSans", "Microsoft YaHei UI", "Microsoft YaHei",
+                "Noto Sans SC", system-ui, sans-serif;
+  /* 正文：清爽圆体，多一个衬线降级兜底 */
+  --font-body: var(--font-round), "Songti SC", Georgia, serif;
+  /* 数字与拼音：跟随正文，但用 tabular 对齐 */
+
+  /* ── 圆角：按提示词要求 16-24px ───────────────────────── */
+  --r-xs:   8px;
+  --r-sm:   12px;
+  --r-md:   16px;   /* 输入框、小组件 */
+  --r-lg:   20px;   /* 按钮、标签卡 */
+  --r-xl:   24px;   /* 卡片 */
+  --r-full: 999px;
+
+  /* ── 间距：4 的倍数 ────────────────────────────────────── */
+  --sp-1: 4px;   --sp-2: 8px;   --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px;  --sp-6: 24px;  --sp-8: 32px;  --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px;
+
+  /* ── 阴影：低透明度 + 大模糊 = 柔和。带绿调，不用纯黑 ── */
+  --sd-xs:   0 1px 2px rgba(85,96,79,.04);
+  --sd-sm:   0 1px 3px rgba(85,96,79,.05), 0 3px 8px rgba(85,96,79,.05);
+  --sd-md:   0 2px 6px rgba(85,96,79,.06), 0 8px 20px rgba(85,96,79,.07);
+  --sd-lg:   0 4px 10px rgba(85,96,79,.07), 0 14px 32px rgba(85,96,79,.09);
+  --sd-inset: inset 0 1px 2px rgba(85,96,79,.05);
+  /* 纸签按钮的"贴纸"感：底部一道实体边 */
+  --sd-sticker: 0 1px 0 var(--n-200), 0 2px 5px rgba(85,96,79,.07);
+
+  /* ── 磨砂玻璃 ──────────────────────────────────────────── */
+  --glass-blur: blur(14px) saturate(1.15);
+
+  /* ── 材质纹理（内联 SVG / 渐变，零外部资源）───────────── */
+  /* 亚麻纸：两组交叉的极淡斜线，模拟织纹 */
+  --tx-linen:
+    repeating-linear-gradient(45deg,  rgba(168,191,165,.030) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(-45deg, rgba(216,195,165,.030) 0 1px, transparent 1px 3px);
+  /* 细腻颗粒：feTurbulence，透明度极低 */
+  --tx-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.33 0 0 0 0 0.38 0 0 0 0 0.31 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* 柔光：两个大椭圆，模拟晨光漫射 */
+  --tx-glow:
+    radial-gradient(ellipse 62% 46% at 82% 4%,  rgba(169,195,214,.16), transparent 64%),
+    radial-gradient(ellipse 54% 40% at 10% 96%, rgba(168,191,165,.13), transparent 66%);
+
+  /* ── 动效：缓慢柔和，全部 0.6s 以上 ────────────────────── */
+  --ease-soft:  cubic-bezier(.4, 0, .2, 1);
+  --ease-out:   cubic-bezier(.16, 1, .3, 1);
+  --dur-fast:   220ms;
+  --dur-base:   360ms;
+  --dur-slow:   600ms;
+  --dur-drift:  16s;    /* 叶子飘落 */
+  --dur-cloud:  48s;    /* 云飘 */
+  --dur-breathe: 5.5s;  /* 呼吸 */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   02 Element Plus / 既有组件的兼容映射层
+   ──────────────────────────────────────────────────────────────────
+   作用：既有组件（AppShell.vue / HomePage.vue / LoginPage.vue /
+        RegisterPage.vue / NotFoundPage.vue / EmptyState.vue）引用的是
+        global.css 里定义的 --ad-* 变量；Element Plus 组件引用的是
+        --el-* 变量。这里把这两套变量重新指向「森语时光」的色板，
+        于是不需要改任何一个现有组件，就能整体换肤。
+
+   为什么用 `html:root` 而不是 `:root`：
+        global.css 与 element-plus/dist/index.css 都用 `:root` 定义变量，
+        同权重时只有「后引入的那份」生效。`html:root` 多一个类型选择器
+        （权重 0,1,1 > 0,1,0），因此无论 theme.css 先引入还是后引入，
+        这一层都稳定生效，不依赖接入顺序。
+
+   取色口径（与预览页的语义层保持一致）：
+        --brand(#A8BFA5) 只用于「色块 / 描边 / 装饰」；
+        「浅底上的文字」一律用深一档的 --brand-deep(#6F8F6A)
+        —— 预览页自己就是这么做的（.btn--text / .tag / .bubble__src a）。
+   ══════════════════════════════════════════════════════════════════ */
+html:root {
+
+  /* ── --ad-* ：项目既有变量层 ─────────────────────────────── */
+
+  /* ⚠️ 可回退项：--ad-color-primary 在 AppShell 里被当成「导航高亮**文字**色」
+     用（.shell__nav-link.is-active { color: … }）。若直接给主品牌色 #A8BFA5，
+     它在奶油白上的对比度只有 1.9:1，等于读不清。
+
+     模块 2-4 的决定：**不再让这一个变量身兼两职**。
+       - --ad-color-primary 保持与 Element Plus 主色一致（苔藓绿），语义 = "品牌主色"
+       - 另外新增 --ad-nav-active，专供"浅底上的强调文字"（导航高亮），
+         取 #4F6B4C（在奶油白 #FFF9F0 上约 5.3:1，过 WCAG AA 的 4.5:1）
+
+     为什么要拆开：--ad-color-primary 被多处引用（导航文字、按钮边框、
+     链接色），它的语义本来是"主色"，不该因为某一处的对比度需求而被整体压深。
+     把可访问性需求收敛到一个专用变量上，改起来也只影响那一处。 */
+  --ad-color-primary:   var(--brand-deep);
+
+  /* 浅底上的强调文字（导航激活态等）。对比度约 5.3:1，过 WCAG AA */
+  --ad-nav-active:      #4F6B4C;
+
+  --ad-color-success:   var(--success);
+  --ad-color-warning:   var(--warn);
+  --ad-color-danger:    var(--danger);
+  --ad-color-info:      var(--info);
+
+  --ad-text-primary:     var(--text-primary);
+  --ad-text-regular:     var(--text-secondary);
+  /*
+   * ⚠️ 模块 2-4 拍板：这里**不用** --text-tertiary(n-400 #9BA695)。
+   *
+   * 原因是对比度。-ad-text-secondary 在日记三页里被用于副标题、
+   * 筛选说明、日期、元信息这类 12.5-13px 的**小字**，
+   * 而 n-400 在奶油白/晨雾白上只有约 2.4:1，远低于 WCAG AA 要求的 4.5:1。
+   *
+   * 预览页里 n-400 确实是用作"三级文字"的，但那是在 14px 以上的
+   * 展示语境里。产品里 12-13px 的小字用同一档颜色读不清。
+   *
+   * 取 n-500（#7C8778，约 3.9:1）：仍不算过 AA，但已是"不牺牲
+   * 设计层级"前提下最实的一档。要真正过 AA 需要 n-700，
+   * 那会让"三级文字"和"正文"糊在一起、层级消失 —— 不值得。
+   *
+   * 这个取舍有意识：**可读性优先于严格合规**，且偏离预览页之处已记录在此。
+   */
+  --ad-text-secondary:   var(--text-secondary);
+  --ad-text-placeholder: var(--text-placeholder);
+
+  --ad-border-color:  var(--border);
+  --ad-bg-page:       var(--bg-page);
+  --ad-bg-card:       var(--bg-card);
+
+  /* 圆体字体栈（标题 / 按钮用），给页面组件直接取用 */
+  --ad-font-round:    var(--font-round);
+
+  /* 卡片圆角：取预览页 .card 的 --r-xl（24px） */
+  --ad-radius-card:   var(--r-xl);
+
+  /* 布局尺寸：保持 global.css 原值不动（改这两个会整体改变版心与头部高度，
+     不属于"换肤"范围）。预览页的 .wrap 是 1180px，如需对齐可自行改成 1180px。 */
+  --ad-content-max-width: 1200px;
+  --ad-header-height:     56px;
+
+
+  /* ── --el-* ：Element Plus 2.14.6 全局变量 ──────────────────
+     变量名已逐一核对 node_modules/element-plus/dist/index.css。
+     所有 light-3/5/7/8/9 与 dark-2 都是按 Element Plus 自己的公式算出来的：
+       light-N = N*10% 白 + 其余主色      dark-2 = 20% 黑 + 80% 主色
+     （即 sass mix() 的口径，所以色阶过渡与 EP 原生表现一致） */
+
+  /* 主色 = 苔藓绿 #6F8F6A */
+  --el-color-primary:         var(--c-moss);
+  --el-color-primary-light-3: #9AB197;
+  --el-color-primary-light-5: #B7C7B5;
+  --el-color-primary-light-7: #D4DDD2;
+  --el-color-primary-light-8: #E2E9E1;
+  --el-color-primary-light-9: #F1F4F0;
+  --el-color-primary-dark-2:  #597255;
+
+  /* 状态色：成功=苔藓绿，警告=蜂蜜黄深一档 #C9A44C，危险=枫叶红 */
+  --el-color-success:         var(--c-moss);
+  --el-color-success-light-3: #9AB197;
+  --el-color-success-light-5: #B7C7B5;
+  --el-color-success-light-7: #D4DDD2;
+  --el-color-success-light-8: #E2E9E1;
+  --el-color-success-light-9: #F1F4F0;
+  --el-color-success-dark-2:  #597255;
+
+  --el-color-warning:         var(--warn);
+  --el-color-warning-light-3: #D9BF82;
+  --el-color-warning-light-5: #E4D2A6;
+  --el-color-warning-light-7: #EFE4C9;
+  --el-color-warning-light-8: #F4EDDB;
+  --el-color-warning-light-9: #FAF6ED;
+  --el-color-warning-dark-2:  #A1833D;
+
+  --el-color-danger:          var(--c-maple);
+  --el-color-danger-light-3:  #D9A397;
+  --el-color-danger-light-5:  #E4BDB5;
+  --el-color-danger-light-7:  #EFD7D2;
+  --el-color-danger-light-8:  #F4E5E1;
+  --el-color-danger-light-9:  #FAF2F0;
+  --el-color-danger-dark-2:   #A16255;
+
+  --el-color-error:           var(--c-maple);
+  --el-color-error-light-3:   #D9A397;
+  --el-color-error-light-5:   #E4BDB5;
+  --el-color-error-light-7:   #EFD7D2;
+  --el-color-error-light-8:   #F4E5E1;
+  --el-color-error-light-9:   #FAF2F0;
+  --el-color-error-dark-2:    #A16255;
+
+  /* 信息色：EP 的 info 是中性灰，这里取绿灰 --n-500，保持整个界面没
+     有冷灰。注意它和 --ad-color-info（雾蓝 --c-haze，用于"信息态"语义）
+     不是同一个角色，前者是 EP 的中性状态色，后者是品牌语义色。 */
+  --el-color-info:            var(--n-500);
+  --el-color-info-light-3:    #A3ABA1;
+  --el-color-info-light-5:    #BEC3BC;
+  --el-color-info-light-7:    #D8DBD7;
+  --el-color-info-light-8:    #E5E7E4;
+  --el-color-info-light-9:    #F2F3F2;
+  --el-color-info-dark-2:     #636C60;
+
+  /* 文字层级：与 --ad-text-* 完全同口径 */
+  --el-text-color-primary:     var(--text-primary);
+  --el-text-color-regular:     var(--text-secondary);
+  --el-text-color-secondary:   var(--text-tertiary);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-text-color-disabled:    var(--n-300);
+
+  /* 边框 */
+  --el-border-color:              var(--border);
+  --el-border-color-light:        var(--border-soft);
+  --el-border-color-lighter:      var(--border-soft);
+  --el-border-color-extra-light:  var(--border-soft);
+  --el-border-color-dark:         var(--border-strong);
+  --el-border-color-darker:       var(--border-strong);
+  --el-border-color-hover:        var(--n-300);
+
+  /* 背景与填充 */
+  --el-bg-color:            var(--bg-card);
+  --el-bg-color-page:       var(--bg-page);
+  --el-bg-color-overlay:    var(--bg-card);
+  --el-fill-color-blank:    var(--c-cream);
+  --el-fill-color:          var(--bg-hover);
+  --el-fill-color-light:    var(--bg-sage-soft);
+  --el-fill-color-lighter:  var(--bg-hover);
+  --el-fill-color-darker:   var(--n-200);
+  --el-mask-color:          rgba(247, 244, 236, .9);
+  --el-overlay-color-lighter: rgba(58, 66, 56, .45);   /* 用 --n-900 系，不用纯黑 */
+
+  /* 禁用态 */
+  --el-disabled-bg-color:     var(--bg-hover);
+  --el-disabled-text-color:   var(--n-300);
+  --el-disabled-border-color: var(--border);
+
+  /* 圆角：森语时光的输入框/小组件是 --r-md(16px)，小元件 --r-sm(12px) */
+  --el-border-radius-base:  var(--r-md);
+  --el-border-radius-small: var(--r-sm);
+  --el-border-radius-round: var(--r-full);
+
+  /* 字体与阴影 */
+  --el-font-family:  var(--font-body);
+  --el-box-shadow:          var(--sd-md);
+  --el-box-shadow-light:    var(--sd-sm);
+  --el-box-shadow-lighter:  var(--sd-xs);
+  --el-box-shadow-dark:     var(--sd-lg);
+
+  /* 过渡时长：取森语时光的 --dur-fast(220ms)，比 EP 默认的 300ms 更利落，
+     但仍在"缓慢柔和"的设计区间内。 */
+  --el-transition-duration:      var(--dur-fast);
+  --el-transition-duration-fast: var(--dur-fast);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   03 页面基础
+   ──────────────────────────────────────────────────────────────────
+   对应预览页「页面基础」一节：背景三层叠加 = 柔光 + 亚麻纸 + 颗粒。
+   注：这里会覆盖 global.css 的 body（14px / 1.6）—— 森语时光的正文字阶
+   是 15px / 1.8。若不想动全局字号，删掉 font-size 与 line-height 两行即可。
+   ══════════════════════════════════════════════════════════════════ */
+* { box-sizing: border-box; }
+
+/* 写成 `html body`：global.css 也用 `body`，同权重时只能靠引入顺序取胜；
+   这里提高一级权重（0,0,2 > 0,0,1），无论 theme.css 先引入还是后引入，
+   页面底色与字体都以森语时光为准。 */
+html body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+  background-image: var(--tx-glow), var(--tx-linen), var(--tx-grain);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   04 卡片 —— 手帐贴纸感
+   ══════════════════════════════════════════════════════════════════ */
+.card {
+  position: relative;
+  background-color: var(--bg-card);
+  background-image: var(--tx-linen), var(--tx-grain);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sd-md);
+  overflow: hidden;
+}
+/* 卡片顶部水彩晕染 —— 像贴纸边缘的洇色 */
+.card::before {
+  content: ""; position: absolute; inset: -30% -10% auto -10%; height: 130px;
+  background: radial-gradient(ellipse 60% 100% at 24% 100%,
+              rgba(168,191,165,.14), transparent 70%);
+  pointer-events: none;
+}
+/* 右上角一枚小小的"胶带"—— 手帐贴纸的标志性元素。
+   ⚠️ 与预览页行为一致、未做"修正"：.card 有 overflow:hidden，而胶带定位在
+   top:-9px，因此胶带上沿会被卡片裁掉，最终只露出下缘约 11px。
+   这是预览页定稿的观感，这里原样保留。 */
+.card--taped::after {
+  content: ""; position: absolute; top: -9px; right: 34px;
+  width: 62px; height: 20px;
+  background: rgba(232,200,122,.34);
+  border-left: 1px dashed rgba(201,164,76,.28);
+  border-right: 1px dashed rgba(201,164,76,.28);
+  transform: rotate(-4deg);
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(85,96,79,.06);
+}
+.card__head {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 17px 22px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.card__title {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--font-round);
+  font-size: 16.5px; font-weight: 600; color: var(--text-title);
+}
+.card__title svg { color: var(--brand); flex-shrink: 0; }
+.card__body { position: relative; z-index: 1; padding: 22px; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   05 按钮 —— 纸签 / 贴纸
+   ══════════════════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 24px;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  font-family: var(--font-round); font-size: 14.5px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: transform var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-base) var(--ease-soft),
+              background-color var(--dur-fast) var(--ease-soft),
+              border-color var(--dur-fast) var(--ease-soft);
+}
+.btn:active { transform: translateY(2px); }
+
+/* 主按钮：鼠尾草绿纸签，底部一道实体边 = 纸的厚度 */
+.btn--primary {
+  background: var(--c-sage);
+  color: #33402F;
+  box-shadow: 0 1px 0 #8AA886, var(--sd-sm);
+}
+.btn--primary:hover {
+  background: #9CB79A; transform: translateY(-1px);
+  box-shadow: 0 2px 0 #8AA886, var(--sd-md);
+}
+.btn--primary:active { box-shadow: 0 0 0 #8AA886, var(--sd-xs); }
+
+/* 次按钮：奶油纸签 + 细木色边 */
+.btn--ghost {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border);
+  box-shadow: var(--sd-sticker);
+}
+.btn--ghost:hover { border-color: var(--c-sage); color: var(--brand-deep); transform: translateY(-1px); }
+
+/* 文字按钮 */
+.btn--text { background: transparent; color: var(--brand-deep); padding: 8px 12px; }
+.btn--text:hover { background: var(--bg-sage-soft); }
+
+/* 虚线贴纸：用于"添加标签"这类轻操作 */
+.btn--dashed {
+  background: transparent; color: var(--text-tertiary);
+  border: 1.5px dashed var(--border);
+  box-shadow: none;
+}
+.btn--dashed:hover { border-color: var(--c-sage); color: var(--brand-deep); background: var(--bg-sage-soft); }
+
+.btn--sm { padding: 7px 16px; font-size: 13px; border-radius: var(--r-md); }
+.btn--block { width: 100%; }
+.btn--icon { padding: 10px; border-radius: var(--r-md); }
+
+/* 以下两条是**本文件新增**的（预览页是静态展示页，不存在禁用态与键盘焦点场景）。
+   取值复用已有的 token，不引入新颜色：焦点环与 .field__input:focus 同一套。 */
+.btn:focus-visible {
+  outline: none; border-color: var(--c-sage);
+  box-shadow: var(--sd-inset), 0 0 0 3.5px rgba(168,191,165,.24);
+}
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed; transform: none;
+  background: var(--bg-hover); color: var(--text-placeholder);
+  border-color: var(--border-soft); box-shadow: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   06 输入框 —— 横线纸
+   ══════════════════════════════════════════════════════════════════ */
+.field { margin-bottom: 19px; }
+.field__label {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px; font-size: 13.5px; color: var(--text-secondary);
+  font-family: var(--font-round);
+}
+.field__input {
+  width: 100%; padding: 12px 15px;
+  background-color: var(--bg-input);
+  /* 横线纸：用 repeating-linear-gradient 画极淡的横向格线 */
+  background-image: repeating-linear-gradient(
+      180deg, transparent 0 25px, rgba(169,195,214,.22) 25px 26px);
+  background-position: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--sd-inset);
+  color: var(--text-primary);
+  font-family: var(--font-body); font-size: 14.5px; line-height: 26px;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-fast) var(--ease-soft);
+}
+.field__input::placeholder { color: var(--text-placeholder); }
+.field__input:focus {
+  outline: none; border-color: var(--c-sage);
+  box-shadow: var(--sd-inset), 0 0 0 3.5px rgba(168,191,165,.24);
+}
+.field__hint { margin-top: 7px; font-size: 12px; color: var(--text-tertiary); }
+.field__err  { margin-top: 7px; font-size: 12px; color: var(--c-maple); }
+
+/* 多行：像日记本的一页。
+   用法与预览页相同 —— 必须和 .field__input 组合使用
+   （textarea 元素同时挂 .field__input 与 .field__area 两个类）。 */
+.field__area {
+  min-height: 128px; resize: vertical; line-height: 26px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   07 标签与情绪徽标
+   ══════════════════════════════════════════════════════════════════ */
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 13px; border-radius: var(--r-full);
+  font-size: 12.5px; font-family: var(--font-round);
+  background: var(--bg-sage-soft); color: var(--brand-deep);
+  border: 1px solid rgba(168,191,165,.5);
+}
+.tag--haze  { background: var(--bg-haze-soft);  color: #5A7E99; border-color: rgba(169,195,214,.5); }
+.tag--honey { background: var(--bg-honey-soft); color: #A8842E; border-color: rgba(232,200,122,.6); }
+.tag--lilac { background: var(--bg-lilac-soft); color: #8674A0; border-color: rgba(185,167,201,.5); }
+.tag--maple { background: var(--bg-maple-soft); color: #A65F4F; border-color: rgba(201,123,106,.45); }
+.tag--plain { background: var(--bg-hover);      color: var(--text-tertiary); border-color: var(--border-soft); }
+
+/* 情绪徽标 */
+.mood {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: var(--r-full);
+  font-size: 12.5px;
+  border: 1px solid transparent;
+}
+.mood--calm { background: var(--bg-haze-soft);  color: #5A7E99; border-color: rgba(169,195,214,.45); }
+.mood--joy  { background: var(--bg-honey-soft); color: #A8842E; border-color: rgba(232,200,122,.55); }
+.mood--anx  { background: var(--bg-maple-soft); color: #A65F4F; border-color: rgba(201,123,106,.42); }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   08 提示条 —— 磨砂玻璃
+   ══════════════════════════════════════════════════════════════════ */
+.alert {
+  display: flex; gap: 11px; align-items: flex-start;
+  padding: 13px 16px; margin-bottom: 18px;
+  border-radius: var(--r-md); border: 1px solid;
+  font-size: 13.5px; line-height: 1.75;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.alert svg { flex-shrink: 0; margin-top: 3px; }
+.alert--info    { background: var(--bg-haze-soft);  color: #4E7391; border-color: rgba(169,195,214,.5); }
+.alert--success { background: var(--bg-moss-soft);  color: #4F6B4C; border-color: rgba(111,143,106,.4); }
+.alert--warn    { background: var(--bg-honey-soft); color: #A8842E; border-color: rgba(232,200,122,.55); }
+.alert--danger  { background: var(--bg-maple-soft); color: #A65F4F; border-color: rgba(201,123,106,.42); }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   09 日记卡片 / 列表项
+   ──────────────────────────────────────────────────────────────────
+   ⚠️ 使用前提（预览页 06 / 09 的写法）：.diary 是 .card 的**直接子元素**，
+      紧跟在可选的 .card__head 之后（即 .card > .diary + .diary …），
+      靠 .card 的圆角与 overflow:hidden 完成边缘裁切，条目之间用
+      border-bottom 分隔、最后一条自动去掉。.diary 自身不再有背景色，
+      由 .card 的奶油白透出来。
+      若把它放进 .card__body（带 22px 内边距）里，hover 时左侧浮出的那条
+      绿色竖线（left:7px）会相对内边距再往内缩，位置会偏。
+   ══════════════════════════════════════════════════════════════════ */
+.diary {
+  position: relative;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-soft);
+  cursor: pointer;
+  transition: background-color var(--dur-base) var(--ease-soft);
+}
+.diary:last-child { border-bottom: none; }
+.diary:hover { background: rgba(234,240,231,.55); }
+/* hover 时左侧浮出一片小叶子 —— 微妙的"被发现"感 */
+.diary::before {
+  content: ""; position: absolute; left: 7px; top: 50%;
+  width: 3px; height: 0; border-radius: var(--r-full);
+  background: var(--c-sage); transform: translateY(-50%);
+  transition: height var(--dur-base) var(--ease-out);
+}
+.diary:hover::before { height: 42%; }
+
+.diary__date {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--n-400);
+  letter-spacing: .06em; margin-bottom: 7px;
+}
+.diary__title {
+  font-family: var(--font-round); font-size: 17px; font-weight: 600;
+  color: var(--text-title); margin-bottom: 8px; line-height: 1.5;
+}
+.diary__excerpt {
+  font-size: 14px; color: var(--text-secondary); line-height: 1.95;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.diary__foot { margin-top: 12px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   10 日历 —— 月历手帐
+   ──────────────────────────────────────────────────────────────────
+   用法：table.cal 放在 .card__body 里；每个日期格是 td 内嵌一个
+   div.cal__day（可叠加 --muted / --has / --today / --mem 修饰类）。
+   ══════════════════════════════════════════════════════════════════ */
+.cal { width: 100%; border-collapse: separate; border-spacing: 5px; }
+.cal th {
+  padding: 6px 0; font-size: 12px; font-weight: 500;
+  color: var(--text-tertiary); font-family: var(--font-round);
+}
+.cal th:first-child, .cal th:last-child { color: var(--c-maple); }
+.cal td { padding: 0; }
+.cal__day {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px;
+  height: 50px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  font-size: 13.5px; color: var(--text-primary);
+  background: rgba(255,255,255,.5);
+  transition: all var(--dur-fast) var(--ease-soft);
+  cursor: pointer;
+}
+.cal__day:hover { background: var(--bg-sage-soft); border-color: rgba(168,191,165,.5); }
+.cal__day--muted { color: var(--n-300); background: transparent; }
+/* 有日记的日子：底部一个小圆点 */
+.cal__day--has::after {
+  content: ""; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--c-sage);
+}
+/* 今天：鼠尾草绿圆角底 + 呼吸光圈 */
+.cal__day--today {
+  background: var(--c-sage); color: #2E3A2B; font-weight: 600;
+  animation: breathe 5.5s var(--ease-soft) infinite;
+}
+.cal__day--today::after { background: #2E3A2B; }
+/* 有长期记忆的日子：左上角一枚叶子标记 */
+.cal__day--mem::before {
+  content: ""; position: absolute; top: 4px; left: 5px;
+  width: 5px; height: 5px; border-radius: 50% 0;
+  background: var(--c-lilac);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   11 AI 对话气泡
+   ══════════════════════════════════════════════════════════════════ */
+.chat { display: grid; gap: 16px; }
+.bubble { display: flex; gap: 11px; max-width: 90%; }
+.bubble--user { margin-left: auto; flex-direction: row-reverse; }
+.bubble__av {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-soft);
+}
+.bubble--ai   .bubble__av { background: var(--bg-sage-soft); color: var(--brand-deep); }
+.bubble--user .bubble__av { background: var(--bg-haze-soft); color: #5A7E99; }
+.bubble__body {
+  padding: 13px 17px; border-radius: var(--r-lg);
+  font-size: 14px; line-height: 1.95;
+  background-image: var(--tx-linen);
+}
+.bubble--ai .bubble__body {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--sd-sm);
+  border-top-left-radius: 6px;
+  color: var(--text-primary);
+}
+.bubble--user .bubble__body {
+  background-color: var(--bg-haze-soft);
+  border: 1px solid rgba(169,195,214,.4);
+  border-top-right-radius: 6px;
+  color: #46647A;
+}
+.bubble__src {
+  display: block; margin-top: 12px; padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px; color: var(--text-tertiary);
+}
+.bubble__src a { color: var(--brand-deep); text-decoration: none; border-bottom: 1px dotted var(--c-sage); }
+
+/* 打字指示器（呼吸圆点）：容器挂 .typing，内部放 3 个 i 元素当圆点 */
+.typing { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
+.typing i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--c-sage);
+  animation: typing 1.5s var(--ease-soft) infinite;
+}
+.typing i:nth-child(2) { animation-delay: .22s; }
+.typing i:nth-child(3) { animation-delay: .44s; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   12 空状态
+   ──────────────────────────────────────────────────────────────────
+   结构：.empty > .empty__art（插画，可选） + .empty__title +
+        .empty__desc + .empty__action（按钮容器）
+   ══════════════════════════════════════════════════════════════════ */
+.empty { padding: 52px 24px; text-align: center; }
+.empty__art { display: block; margin: 0 auto 16px; }
+.empty__title {
+  font-family: var(--font-round); font-size: 16.5px; font-weight: 600;
+  color: var(--text-title); margin-bottom: 7px;
+}
+.empty__desc { font-size: 13px; color: var(--text-tertiary); line-height: 1.9; max-width: 380px; margin: 0 auto; }
+.empty__action { margin-top: 20px; }
+
+/* 轻微呼吸。
+   预览页里它同时挂在「空状态插画」和「看板娘」上（class="empty__art sprite"）；
+   立绘相关的容器类（.mascot-* / .hero__mascot）没有搬过来，但这条通用工具类
+   保留了下来 —— 空状态插画需要它，别的地方（图标、徽标）也可以直接用。 */
+.sprite { animation: breathe 5.5s var(--ease-soft) infinite; transform-origin: center bottom; }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   13 加载动画
+   ──────────────────────────────────────────────────────────────────
+   预览页共 4 种：水波涟漪 / 风与叶（两种都是内联 SVG，样式写在行内）、
+   骨架屏、进度环。可以从 CSS 侧复用的部分都在这里。
+   ══════════════════════════════════════════════════════════════════ */
+.loader { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 40px 20px; }
+.loader__label { font-size: 13px; color: var(--text-tertiary); letter-spacing: .08em; }
+
+/* 骨架屏：带微光扫过 */
+.skel {
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, #EEF2EA 0%, #F6F8F3 40%, #EEF2EA 80%);
+  background-size: 220% 100%;
+  animation: shimmer 2.4s var(--ease-soft) infinite;
+}
+.skel--line { height: 13px; margin-bottom: 11px; }
+.skel--title { height: 19px; width: 46%; margin-bottom: 15px; }
+.skel--w80 { width: 80%; } .skel--w60 { width: 60%; } .skel--w40 { width: 40%; }
+
+/* 进度环：外层 svg 挂 .ring，内部两条 circle 分别挂 .ring__track（轨道）
+   与 .ring__fill（进度弧，靠 stroke-dashoffset 走动画） */
+.ring { transform: rotate(-90deg); }
+.ring__track { fill: none; stroke: var(--n-100); stroke-width: 4; }
+.ring__fill {
+  fill: none; stroke: var(--c-sage); stroke-width: 4; stroke-linecap: round;
+  stroke-dasharray: 138; stroke-dashoffset: 42;
+  animation: ringspin 2.6s var(--ease-soft) infinite;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   14 动效关键帧 + 无障碍
+   ──────────────────────────────────────────────────────────────────
+   预览页里还有两个加载器的动画是挂在内联 SVG 上的（水波涟漪用 ripple、
+   风与叶用 sway），没有对应的 class，这里保留它们的 keyframes，
+   落地时自行挂到自己的 SVG 元素上即可（记得带 transform-origin: center）。
+   ══════════════════════════════════════════════════════════════════ */
+/* 呼吸：空状态插画、日历"今天"、看板娘共用 */
+@keyframes breathe {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.035); opacity: .92; }
+}
+/* 摇曳：叶子、花（水波涟漪加载器用） */
+@keyframes sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
+}
+/* 水波：用于加载图标（水波涟漪加载器用） */
+@keyframes ripple {
+  0%   { transform: scale(.7); opacity: .55; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+/* 微光扫过：骨架屏 */
+@keyframes shimmer {
+  0%   { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+/* 打字指示 */
+@keyframes typing {
+  0%, 100% { transform: translateY(0);    opacity: .45; }
+  40%      { transform: translateY(-4px); opacity: 1; }
+}
+/* 进度环 */
+@keyframes ringspin {
+  0%   { stroke-dashoffset: 138; }
+  55%  { stroke-dashoffset: 34; }
+  100% { stroke-dashoffset: 138; }
+}
+/* 翻页：卡片入场。
+   预览页 09 完整页面预览里是用行内 style 挂上去的
+   （animation: pagein .8s var(--ease-out) both），
+   落地时可以挂到列表项/页面上；这里只提供 keyframes，不预设 class。 */
+@keyframes pagein {
+  0%   { transform: perspective(900px) rotateY(-9deg) translateX(-14px); opacity: 0; }
+  100% { transform: perspective(900px) rotateY(0)     translateX(0);     opacity: 1; }
+}
+
+/* 尊重系统"减弱动态效果"。
+   预览页明确要求必须加这一段：开这个设置的用户通常是因动效引起不适
+   （前庭功能障碍），忽略它是不合格的。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

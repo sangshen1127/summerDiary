@@ -1,0 +1,37 @@
+package {{package}}.service;
+
+import {{package}}.api.v1.dto.{{Entity}}Request;
+import {{package}}.api.v1.dto.{{Entity}}Response;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+/**
+ * {{Entity}} service interface
+ */
+public interface {{Entity}}Service {
+
+    /**
+     * Create {{entity}}
+     */
+    {{Entity}}Response create({{Entity}}Request request);
+
+    /**
+     * Get {{entity}} by id
+     */
+    {{Entity}}Response getById(Long id);
+
+    /**
+     * Get all {{entity}}s (paginated)
+     */
+    Page<{{Entity}}Response> getAll(Pageable pageable);
+
+    /**
+     * Update {{entity}}
+     */
+    {{Entity}}Response update(Long id, {{Entity}}Request request);
+
+    /**
+     * Delete {{entity}}
+     */
+    void delete(Long id);
+}

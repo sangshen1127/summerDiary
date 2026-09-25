@@ -1,0 +1,53 @@
+# ══════════════════════════════════════════════════════════════
+# 开发环境配置
+# ══════════════════════════════════════════════════════════════
+# 通过 SPRING_PROFILES_ACTIVE=dev 激活（application.yml 里的默认值）。
+#
+# 与 application-prod.yml 的差异只有两类：
+#   1. 日志详细程度（开发要看得见，生产要防泄露）
+#   2. 错误信息详细程度（开发要方便排查，生产要防探测）
+# ══════════════════════════════════════════════════════════════
+
+logging:
+  level:
+    # 看自己的 SQL 和参数，方便调 XML
+    com.sangshen.aidiary.mapper: DEBUG
+    # Spring Security 过滤链（Phase 1 调认证时很有用）
+    org.springframework.security: INFO
+    # Hikari 连接池
+    com.zaxxer.hikari: INFO
+    # 关掉 Spring 启动噪音
+    org.springframework.boot.web.embedded: INFO
+
+spring:
+  # 开发期关掉 Flyway 自动迁移。
+  # 理由见 application.yml 里 flyway 段的注释：数据库没起来时，
+  # 让应用能启动并让 /actuator/health 报出真实原因，比整个起不来更好排查。
+  # 需要验证迁移脚本时用：
+  #   mvn spring-boot:run -Dspring-boot.run.arguments=--spring.flyway.enabled=true
+  flyway:
+    enabled: false
+
+  # 开发期打开 Spring MVC 的问题定位工具
+  mvc:
+    # 无匹配路由时抛 NoHandlerFoundException，让全局异常处理器统一返回 40401
+    # （而不是 Spring 默认的白页错误）
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      # 关闭静态资源默认映射，避免它抢在 DispatcherServlet 之前处理请求
+      add-mappings: false
+
+server:
+  error:
+    # 开发期返回详细错误信息
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: on_param
+    include-exception: true
+
+# 开发期允许 Chroma 连接失败而不影响启动（Phase 5 才真正依赖）
+app:
+  ai:
+    # 是否在没有 API Key 时使用 Mock 实现（Phase 3 启用）
+    use-mock-when-no-key: true
